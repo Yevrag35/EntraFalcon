@@ -243,6 +243,13 @@ $global:GLOBALJavaScript = @'
                     },
                     columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Inactive", "LastSignInDays", "Owners", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "LastSignInDays", direction: "desc" }
+                },
+                {
+                    label: "Entra Connect Application",
+                    filters: { 
+                        DisplayName: "^ConnectSyncProvisioning_"
+                    },
+                    columns: ["DisplayName", "Enabled", "Inactive", "Owners", "Credentials", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 }
             ],
             "Managed Identities": [
@@ -306,6 +313,12 @@ $global:GLOBALJavaScript = @'
                     label: "Multitenant Apps",
                     filters: {
                         SignInAudience: "AzureADandPersonalMicrosoftAccount||AzureADMultipleOrgs"
+                    }
+                },
+                {
+                    label: "Entra Connect Application",
+                    filters: { 
+                        DisplayName: "^ConnectSyncProvisioning_"
                     }
                 }
 
