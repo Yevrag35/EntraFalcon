@@ -695,9 +695,19 @@ function Invoke-CheckEnterpriseApps {
             $AppsignInData = $Null
         }
 
-    ########################################## SECTION: RISK RATING AND WARNINGS ##########################################        
-        $AppCredentialsCount = ($AppCredentials | Measure-Object).count
+    ########################################## SECTION: RISK RATING AND WARNINGS ##########################################
+    
+    
+        # Check if it the Entra Connect Sync App
+        if ($item.DisplayName -match "ConnectSyncProvisioning_") {
+            $EntraConnectApp = $true
+            $Warnings += "Entra Connect Sync Application!"
+        } else {
+            $EntraConnectApp = $false
+        }
 
+        # Check if the SP has credentials defined
+        $AppCredentialsCount = ($AppCredentials | Measure-Object).count
         if ($AppCredentialsCount -ge 1) {
             $Warnings += "SP with credentials!"
             $LikelihoodScore += $SPLikelihoodScore["SpWithCredentials"]

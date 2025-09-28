@@ -462,6 +462,8 @@ The following table roughly summarizes the checks performed, along with their im
 |EnterpriseApp|Inactive|No|No|
 |EnterpriseApp|Last successful sign-in (days)|No|No|
 |AppRegistrations|Credentials|Yes|Yes|
+|AppRegistrations|Entra Connect App with credentials|Yes|Yes|
+|AppRegistrations|Entra Connect App with multiple certs|Yes|Yes|
 |AppRegistrations|AppRoles|Yes|No|
 |AppRegistrations|AppRedirectURL|No|No|
 |AppRegistrations|AppLock|Yes|No|

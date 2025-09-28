@@ -147,6 +147,7 @@ function Invoke-CheckAppRegistrations {
     $AppLikelihoodScore = @{
         "AppBase"                   = 1
         "AppSecret"                 = 5
+        "EntraConnectIoC"           = 200
         "AppCertificate"            = 2
         "AppOwner"          	    = 20
         "AppAdmins"          	    = 10
@@ -254,6 +255,13 @@ function Invoke-CheckAppRegistrations {
             Write-Host "[*] Status: Processing app $ProgressCounter of $AppsTotalCount..."
         }
 
+        # Check if it the Entra Connect Sync App
+        if ($item.DisplayName -match "ConnectSyncProvisioning_") {
+            $EntraConnectApp = $true
+            $Warnings += "Entra Connect Application!"
+        } else {
+            $EntraConnectApp = $false
+        }
 
         #Process app credentials
         $AppCredentialsSecrets = foreach ($creds in $item.PasswordCredentials) {
@@ -466,6 +474,8 @@ function Invoke-CheckAppRegistrations {
             $ObjectDetails | Add-Member -MemberType NoteProperty -Name Scope -Value 'ThisApplication' -PassThru
         }
 
+
+
         #Calculate likelihood for client credentials
         $SecretsCount = ($AppCredentialsSecrets | Measure-Object).Count
         $LikelihoodScore += $SecretsCount * $AppLikelihoodScore["AppSecret"]
@@ -473,6 +483,17 @@ function Invoke-CheckAppRegistrations {
         $CertificateCount = ($AppCredentialsCertificates | Measure-Object).Count
         $LikelihoodScore += $CertificateCount * $AppLikelihoodScore["AppCertificate"]
 
+        # Warning if Entra Connect App has client secret
+        if ($EntraConnectApp -and $SecretsCount -gt 0) {
+            $LikelihoodScore += $AppLikelihoodScore["EntraConnectIoC"]
+            $Warnings += "IoC: Entra Connect App with secrets!"
+        }
+
+        # Warning if Entra Connect App has mutiple certificates
+        if ($EntraConnectApp -and $CertificateCount -gt 1) {
+            $LikelihoodScore += $AppLikelihoodScore["EntraConnectIoC"]
+            $Warnings += "IoC: Entra Connect App multiple certificates!"
+        }
 
         #Count App Admins and increase risk score
         $CloudAppAdminCurrentAppCount = ($CloudAppAdminCurrentApp | Measure-Object).Count
@@ -486,6 +507,9 @@ function Invoke-CheckAppRegistrations {
         #Check if there are owners
         if ($AppOwnersCount -ge 1) {
             $LikelihoodScore += $AppOwnersCount * $AppLikelihoodScore["AppOwner"]
+            if ($EntraConnectApp) {
+                $Warnings += "Entra Connect App with owner!"
+            }
         }
 
         #Check application lock config
