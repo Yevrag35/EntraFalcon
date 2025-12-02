@@ -1111,7 +1111,7 @@ $MissingPolicies
                 [pscustomobject]@{ 
                   "RoleName" = $($object.RoleName)
                   "RoleTier" = $($object.RoleTier)
-                  "AssignmentsScopedLink" = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).html?Role=$([System.Uri]::EscapeDataString("=$($object.RoleName)"))&Scope=$([System.Uri]::EscapeDataString("!(Tenant)"))>$($object.Assignments)</a>"
+                  "AssignmentsScopedLink" = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html?Role=$([System.Uri]::EscapeDataString("=$($object.RoleName)"))&Scope=$([System.Uri]::EscapeDataString("!(Tenant)"))>$($object.Assignments)</a>"
                   "AssignmentsScoped" = $($object.Assignments)
               }
             }
