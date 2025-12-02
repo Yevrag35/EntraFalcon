@@ -730,10 +730,11 @@ function Invoke-CheckPIM {
             $MaxActiveAssignment = "-"
         }
 
+        # $item.EligibleExpiration and $item.ActiveExpiration are inverted due to the wording used in the portal.
         $AssignmentSettings = [pscustomobject]@{ 
-                    "Allow Permanent Eligible Assignment" = $item.EligibleExpiration
+                    "Allow Permanent Eligible Assignment" = !$item.EligibleExpiration
                     "Expire Eligible Assignments After" = $MaxEligibleAssignment
-                    "Allow Permanent Active Assignment" = $item.ActiveExpiration
+                    "Allow Permanent Active Assignment" = !$item.ActiveExpiration
                     "Expire Active Assignments After" = $MaxActiveAssignment
                     "MFA Claim Required" = $item.ActiveAssignMFA
                     "Justification Required" = $item.ActiveAssignJustification
