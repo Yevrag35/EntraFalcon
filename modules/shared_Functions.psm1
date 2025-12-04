@@ -175,7 +175,7 @@ $global:GLOBALJavaScript = @'
                         SpOwn: "or_>0",
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0",
-                        Warnings: "or_delegated API permissions||through group"
+                        Warnings: "or_delegated API permission||through group"
                     },
                     columns: ["DisplayName", "PublisherName", "Enabled", "Inactive", "Foreign", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
@@ -194,7 +194,7 @@ $global:GLOBALJavaScript = @'
                     filters: { 
                         Foreign: "=True", 
                         ApiDelegated: ">0",
-                        Warnings: "delegated API permissions"
+                        Warnings: "delegated API permission"
                     },
                     columns: ["DisplayName", "PublisherName", "Foreign", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
@@ -217,7 +217,7 @@ $global:GLOBALJavaScript = @'
                         SpOwn: "or_>0",
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0",
-                        Warnings: "or_delegated API permissions||through group"
+                        Warnings: "or_delegated API permission||through group"
                     },
                     columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
