@@ -4,7 +4,7 @@
 
 EntraFalcon is a PowerShell-based assessment tool for pentesters, security analysts, and system administrators to evaluate the security posture of a Microsoft Entra ID environment.
 
-Designed for ease of use, EntraFalcon runs on PowerShell 5.1 and 7, supports both Windows and Linux, and requires no external dependencies or Microsoft Graph API consent.
+Designed for ease of use, EntraFalcon runs on PowerShell 5.1 and 7, supports both Windows and Linux, and requires no additional PowerShell modules, additional installations or Microsoft Graph API consent.
 
 The tool helps uncover privileged objects, potentially risky assignments and Conditional Access misconfigurations that are often overlooked, such as:
 - Users with control over high-privilege groups or applications
