@@ -298,6 +298,7 @@ Certain API permissions allow an application to directly escalate to Global Admi
 | RoleEligibilitySchedule.ReadWrite.Directory                 | Dangerous  | fee28b28-e1f3-4841-818e-2704dc62245f   |
 | PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup        | Dangerous  | 618b6020-bca8-4de6-99f6-ef445fa4d857   |
 | Domain.ReadWrite.All                                        | Dangerous  | 7e05723c-0bb0-42da-be95-ae9f08a6e53c   |
+| Application.ReadUpdate.All                                  | Dangerous  | fc023787-fd04-4e44-9bc7-d454f00c0f0a   |
 | ADSynchronization.ReadWrite.All                             | High       | ab43b826-2c7a-4aff-9ecd-d0629d0ca6a9   |
 | EntitlementManagement.ReadWrite.All                         | High       | 9acd699f-1e81-4958-b001-93b1d2506e19   |
 | Organization.ReadWrite.All                                  | High       | 292d869f-3427-49a8-9dab-8c70152b74e9   |
@@ -328,6 +329,10 @@ Certain API permissions allow an application to directly escalate to Global Admi
 | Files.ReadWrite.All                                         | High       | 75359482-378d-4052-8f01-80520e7db3cd   |
 | DeviceLocalCredential.Read.All                              | High       | db51be59-e728-414b-b800-e0f010df1a79   |
 | AdministrativeUnit.ReadWrite.All                            | High       | 5eb59dd3-1da2-4329-8733-9dabdc435916   |
+| UserAuthMethod-HardwareOATH.ReadWrite.All                   | High       | 7e9ebcc1-90aa-4471-8051-e68d6b4e9c89   |
+| UserAuthMethod-Phone.ReadWrite.All                          | High       | 6e85d483-7092-4375-babe-0a94a8213a58   |
+| UserAuthMethod-QR.ReadWrite.All                             | High       | 4869299f-18c3-40c8-98f2-222657e67db1   |
+| UserAuthMethod-TAP.ReadWrite.All                            | High       | 627169a8-8c15-451c-861a-5b80e383de5c   |
 | User.ReadWrite.All                                          | Medium     | 741f803b-c850-494e-b5df-cde7c675a1ca   |
 | Chat.Read.All                                               | Medium     | 6b7d71aa-70aa-4810-a8d9-5d9fb2830017   |
 | Chat.ReadWrite.All                                          | Medium     | 294ce7c9-31ba-490a-ad7d-97a7d075e4ed   |
@@ -355,6 +360,7 @@ Certain API permissions allow an application to directly escalate to Global Admi
 | RoleEligibilitySchedule.ReadWrite.Directory          | Dangerous| 62ade113-f8e0-4bf9-a6ba-5acb31db32fd   |
 | PrivilegedEligibilitySchedule.ReadWrite.AzureADGroup | Dangerous| ba974594-d163-484e-ba39-c330d5897667   |
 | Domain.ReadWrite.All                                 | Dangerous| 0b5d694c-a244-4bde-86e6-eb5cd07730fe   |
+| Application.ReadUpdate.All                           | Dangerous| 0586a906-4d89-4de8-b3c8-1aacdcc0c679   |
 | EntitlementManagement.ReadWrite.All                  | High     | ae7a573d-81d7-432b-ad44-4ed5c9d89038   |
 | Organization.ReadWrite.All                           | High     | 46ca0847-7e6b-426e-9775-ea810a948356   |
 | Policy.ReadWrite.PermissionGrant                     | High     | 2672f8bb-fd5e-42e0-85e1-ec764dd2614e   |
