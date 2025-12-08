@@ -482,6 +482,15 @@ $global:GLOBALJavaScript = @'
                     columns: ["Role", "Tier", "Eligible", "ActivationDuration", "Warnings"]
                 },
                 {
+                    label: "Tier 0 Roles: Only Active Assignments",
+                    filters: {
+                        Tier: "Tier-0",
+                        Eligible: "=0",
+                        Active: ">0"
+                    },
+                    columns: ["Role", "Tier", "Eligible", "Active"]
+                },
+                {
                     label: "Tier 0/1 Roles: With Warnings",
                     filters: {
                         Tier: "Tier-0 || Tier-1",
@@ -497,6 +506,15 @@ $global:GLOBALJavaScript = @'
                         Warnings: "!=empty"
                     },
                     columns: ["Role", "Tier", "Eligible", "ActivationAuthContext", "ActivationMFA", "ActivationJustification", "ActivationTicketing", "ActivationApproval", "ActivationDuration", "ActiveAssignMFA", "ActiveAssignJustification", "Warnings"]
+                },
+                {
+                    label: "Tier 0/1 Roles: Only Active Assignments",
+                    filters: {
+                        Tier: "Tier-0 || Tier-1",
+                        Eligible: "=0",
+                        Active: ">0"
+                    },
+                    columns: ["Role", "Tier", "Eligible", "Active"]
                 },
                 {
                     label: "Used Roles (Eligible): With Warnings",
