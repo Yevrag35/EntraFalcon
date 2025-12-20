@@ -98,6 +98,9 @@ function Invoke-Auth {
     .PARAMETER Reporting
     Enables additional logging to a CSV.
 
+    .PARAMETER LoginHint
+    Pre-fill the username on the login page
+
     .EXAMPLE
     Invoke-Auth
 
@@ -114,8 +117,8 @@ function Invoke-Auth {
     Performs authentication for Azure ARM
 
     .EXAMPLE
-    Invoke-Auth -Tenant 9f412d6a-ae60-43fb-9765-32e31a6XXXXX"
-
+    Invoke-Auth -Tenant 9f412d6a-ae60-43fb-9765-32e31a6XXXXX
+    Invoke-Auth -Tenant mydomain.ch
     Performs authentication on a specific tenant
 
     .EXAMPLE
@@ -141,7 +144,8 @@ function Invoke-Auth {
         [Parameter(Mandatory=$false)][switch]$DisableCAE = $false,
         [Parameter(Mandatory=$false)][switch]$Reporting = $false,
         [Parameter(Mandatory=$false)][string]$Origin,
-        [Parameter(Mandatory=$false)][string]$ReportName = "Code"
+        [Parameter(Mandatory=$false)][string]$ReportName = "Code",
+        [Parameter(Mandatory=$false)][string]$LoginHint
     )
 
     $AuthError = $false
@@ -168,12 +172,14 @@ function Invoke-Auth {
     # Regular Expression for a GUID
     $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 
-    #Construct Scope
-    if ($Api -match $guidPattern) {
+    # Construct Scope
+    if ($Api -match $guidPattern -or $Api.StartsWith("urn:", 'InvariantCultureIgnoreCase')) {
         $ApiScopeUrl = "$Api/.$Scope"
-    } else {
+    }
+    else {
         $ApiScopeUrl = "https://$Api/.$Scope"
     }
+
 
     #Generate State
     $State = [Convert]::ToBase64String((1..12 | ForEach-Object { [byte](Get-Random -Minimum 0 -Maximum 256) })).Replace('+', '-').Replace('/', '_').Replace('=', '')
@@ -192,7 +198,7 @@ function Invoke-Auth {
         $Url += "&code_challenge=$PKCE&code_challenge_method=plain"
     }
 
-    #Check if PKCE should not be used
+    #Check if LoginHint should not be used
     if ($LoginHint) {
         $Url += "&login_hint=$LoginHint"
     }
@@ -366,7 +372,7 @@ function Invoke-Auth {
                                 }
 
                                 #Call the token endpoint
-                                $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -UserAgent $UserAgent
+                                $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -Origin $Origin -UserAgent $UserAgent
                                 $Proceed = $false
 
                             } elseif ($Request.HttpMethod -eq 'GET' -and $($Request.QueryString) -match "\berror\b") {
@@ -587,7 +593,7 @@ function Invoke-Auth {
         }
     
         #Call the token endpoint
-        $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -UserAgent $UserAgent
+        $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -Origin $Origin -UserAgent $UserAgent
         return $tokens
     }
 }
@@ -690,12 +696,14 @@ function Invoke-Refresh {
     # Regular Expression for a GUID
     $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 
-    #Construct Scope
-    if ($Api -match $guidPattern) {
+    # Construct Scope
+    if ($Api -match $guidPattern -or $Api.StartsWith("urn:", 'InvariantCultureIgnoreCase')) {
         $ApiScopeUrl = "$Api/.$Scope"
-    } else {
+    }
+    else {
         $ApiScopeUrl = "https://$Api/.$Scope"
     }
+
 
     #Define Body (Emulates Azure CLI)
     $Body = @{
@@ -850,7 +858,7 @@ function Invoke-DeviceCodeFlow {
         Default: `organizations`
 
         .PARAMETER Reporting
-        Enables logging (CSV) the details of the refresh operation for later analysis. 
+        Enables logging (CSV) the details of the authentication operation for later analysis. 
 
         .EXAMPLE
         Invoke-DeviceCodeFlow
@@ -869,7 +877,7 @@ function Invoke-DeviceCodeFlow {
     #>
     param (
         [Parameter(Mandatory=$false)][string]$ClientID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
-        [Parameter(Mandatory=$false)][string]$APi = "graph.microsoft.com",
+        [Parameter(Mandatory=$false)][string]$Api = "graph.microsoft.com",
         [Parameter(Mandatory=$false)][switch]$TokenOut,
         [Parameter(Mandatory=$false)][switch]$DisableJwtParsing = $false,
         [Parameter(Mandatory=$false)][switch]$DisableBrowserStart = $false,
@@ -883,11 +891,12 @@ function Invoke-DeviceCodeFlow {
     # Regular Expression for a GUID
     $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 
-    #Construct Scope
-    if ($Api -match $guidPattern) {
-        $Resource = "$Api"
-    } else {
-        $Resource = "https://$API"
+    # Construct Scope
+    if ($Api -match $guidPattern -or $Api.StartsWith("urn:", 'InvariantCultureIgnoreCase')) {
+        $ApiScopeUrl = "$Api/.$Scope"
+    }
+    else {
+        $ApiScopeUrl = "https://$Api/.$Scope"
     }
     
 
@@ -967,7 +976,7 @@ function Invoke-DeviceCodeFlow {
             }
             if ($TokensDeviceCode.access_token -and $TokensDeviceCode.refresh_token) {
                 Write-Host "[+] Got an access token and a refresh token"
-                $TokensDeviceCode | Add-Member -NotePropertyName Expiration_time -NotePropertyValue (Get-Date).AddSeconds($tokens.expires_in)
+                $TokensDeviceCode | Add-Member -NotePropertyName Expiration_time -NotePropertyValue (Get-Date).AddSeconds($TokensDeviceCode.expires_in)
 
                 if (-not $DisableJwtParsing) {
                     #Parse JWT
@@ -994,9 +1003,9 @@ function Invoke-DeviceCodeFlow {
                     if ($null -ne $JWT.xms_cc) {
                         $TokensDeviceCode | Add-Member -NotePropertyName xms_cc -NotePropertyValue $JWT.xms_cc
                     }
-                    Write-Host "[i] Audience: $($JWT.aud) / Expires at: $($tokens.expiration_time)"
+                    Write-Host "[i] Audience: $($JWT.aud) / Expires at: $($TokensDeviceCode.expiration_time)"
                 } else {
-                    Write-Host "[i] Expires at: $($tokens.expiration_time)"
+                    Write-Host "[i] Expires at: $($TokensDeviceCode.expiration_time)"
                 }
                 
                 
@@ -1056,7 +1065,7 @@ function Invoke-ClientCredential {
         Specifies the tenant ID for authentication. This parameter is mandatory.
 
         .PARAMETER Reporting
-        Enables logging (CSV) the details of the refresh operation for later analysis. 
+        Enables logging (CSV) the details of the authentication operation for later analysis. 
 
         .EXAMPLE
         Invoke-ClientCredential -ClientId "your-client-id" -ClientSecret "your-client-secret" -TenantId "your-tenant-id"
@@ -1109,10 +1118,11 @@ function Invoke-ClientCredential {
     # Regular Expression for a GUID
     $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 
-    #Construct Scope
-    if ($Api -match $guidPattern) {
+    # Construct Scope
+    if ($Api -match $guidPattern -or $Api.StartsWith("urn:", 'InvariantCultureIgnoreCase')) {
         $ApiScopeUrl = "$Api/.$Scope"
-    } else {
+    }
+    else {
         $ApiScopeUrl = "https://$Api/.$Scope"
     }
         
@@ -1146,7 +1156,7 @@ function Invoke-ClientCredential {
     if ($Proceed) {
         if ($TokensClientCredential.access_token) {
             Write-Host "[+] Got an access token"
-            $TokensClientCredential | Add-Member -NotePropertyName Expiration_time -NotePropertyValue (Get-Date).AddSeconds($tokens.expires_in)
+            $TokensClientCredential | Add-Member -NotePropertyName Expiration_time -NotePropertyValue (Get-Date).AddSeconds($TokensClientCredential.expires_in)
 
             if (-not $DisableJwtParsing) {
                 #Parse JWT
@@ -1160,7 +1170,7 @@ function Invoke-ClientCredential {
                     break
                 }
 
-                #Add additonal infos to token object
+                # Add additonal infos to token object
                 $TokensClientCredential | Add-Member -NotePropertyName client_app_id -NotePropertyValue $JWT.appid
                 if ($JWT.app_displayname) {$TokensClientCredential | Add-Member -NotePropertyName client_app -NotePropertyValue $JWT.app_displayname}
                 $TokensClientCredential | Add-Member -NotePropertyName sp_object_id -NotePropertyValue $JWT.oid
@@ -1416,7 +1426,7 @@ function Get-Token {
     .PARAMETER UserAgent
     Specifies the user agent string to be used in the HTTP requests (not will only impact non-interactive sign-ins).
     Default: `python-requests/2.32.3`
-    
+
     .PARAMETER Origin
     Define Origin Header to be used in the HTTP request to the token endpoint (required for SPA) (Optional).
 
@@ -1609,40 +1619,69 @@ function Get-Token {
 
 }
 
-Export-ModuleMember -Function Invoke-Auth,Invoke-Refresh,Invoke-DeviceCodeFlow,Invoke-ParseJwt,Show-ModuleHelp,Invoke-ClientCredential
+function Show-EntraTokenAidHelp {
+    [CmdletBinding()]
+    param()
 
-
-function Show-ModuleBanner {
     $banner = @'
     ______      __            ______      __              ___    _     __
    / ____/___  / /__________ /_  __/___  / /_____  ____  /   |  (_)___/ /
   / __/ / __ \/ __/ ___/ __ `// / / __ \/ //_/ _ \/ __ \/ /| | / / __  / 
  / /___/ / / / /_/ /  / /_/ // / / /_/ / ,< /  __/ / / / ___ |/ / /_/ /  
 /_____/_/ /_/\__/_/   \__,_//_/  \____/_/|_|\___/_/ /_/_/  |_/_/\__,_/                                                                
-
 '@
-    # Show Banner with color
+
+    # Header
     Write-Host $banner -ForegroundColor Cyan
-    Write-Host ''
-    # Now showing Available Commands with different colors for emphasis
-    Write-Host 'Available Commands:' -ForegroundColor Green
-    Write-Host ''
-    Write-Host '$tokens = Invoke-Auth                                         ' -ForegroundColor Yellow
-    Write-Host 'Interactive OAuth Code Flow / Defaults to MS Graph API & Azure CLI as client' -ForegroundColor White
-    Write-Host ''
-    Write-Host '$tokens = Invoke-DeviceCodeFlow                               ' -ForegroundColor Yellow
-    Write-Host 'DeviceCode Flow / Defaults to MS Graph API & Azure CLI as client' -ForegroundColor White
-    Write-Host ''
-    Write-Host '$tokens = Invoke-Refresh -RefreshToken $tokens.refresh_token   ' -ForegroundColor Yellow
-    Write-Host 'Get a new Access Token / Defaults to MS Graph API & Azure CLI as client' -ForegroundColor White
-    Write-Host ''
-    Write-Host '$tokens = Invoke-ClientCredential -ClientId $YourClientId -TenantId $YourTenantId -ClientSecret $YourCLientSecret  ' -ForegroundColor Yellow
-    Write-Host 'Authenticate as service principal / Defaults to MS Graph API' -ForegroundColor White
-    Write-Host ''
-    Write-Host 'Invoke-ParseJwt -JWT $tokens.access_token            ' -ForegroundColor Yellow
-    Write-Host 'Parses the JWT' -ForegroundColor White
-    Write-Host ''
+    Write-Host "v20251214" -ForegroundColor Green
+    Write-Host "Project Source: https://github.com/zh54321/EntraTokenAid" -ForegroundColor DarkCyan
+    Write-Host ""
+
+    Write-Host "Commands" -ForegroundColor Green
+    Write-Host "--------"
+    Write-Host "  Invoke-Auth" -ForegroundColor Yellow
+    Write-Host "      Interactive OAuth Authorization Code Flow" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  Invoke-DeviceCodeFlow" -ForegroundColor Yellow
+    Write-Host "      OAuth Device Code Flow (browser assisted / headless)" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  Invoke-Refresh" -ForegroundColor Yellow
+    Write-Host "      Exchange a refresh token for new access/refresh tokens" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  Invoke-ClientCredential" -ForegroundColor Yellow
+    Write-Host "      Client Credential Flow (service principal authentication)" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  Invoke-ParseJwt" -ForegroundColor Yellow
+    Write-Host "      Decode and inspect JWT token claims" -ForegroundColor Gray
+    Write-Host ""
+
+    Write-Host "Common Examples" -ForegroundColor Green
+    Write-Host "----------------"
+    Write-Host "  # Get a token (defaults to the MS Graph API and Azure CLI as client)" -ForegroundColor Gray
+    Write-Host '  $tokens = Invoke-Auth' -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  # Get a token for Azure Resource Manager (defaults Azure CLI as client)" -ForegroundColor Gray
+    Write-Host '  $tokens = Invoke-DeviceCodeFlow -api management.azure.com' -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  # Refresh a token (defaults to MS Graph API & Azure CLI as client)" -ForegroundColor Gray
+    Write-Host '  $tokens = Invoke-Refresh -RefreshToken $tokens.refresh_token' -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  # Authenticate as a service principal (defaults Azure CLI as client)" -ForegroundColor Gray
+    Write-Host '  $tokens = Invoke-ClientCredential -ClientId <ClientId> -ClientSecret <Secret> -TenantId <TenantId>' -ForegroundColor Yellow
+    Write-Host ""
+
+    Write-Host "Detailed Help" -ForegroundColor Green
+    Write-Host "-------------"
+    Write-Host "  Get-Help Invoke-Auth -Detailed" -ForegroundColor Yellow
+    Write-Host "  Get-Help Invoke-Refresh -Detailed" -ForegroundColor Yellow
+    Write-Host "  Get-Help Invoke-DeviceCodeFlow -Detailed" -ForegroundColor Yellow
+    Write-Host "  Get-Help Invoke-ClientCredential -Detailed" -ForegroundColor Yellow
+    Write-Host ""
 }
 
-# Show Banner
-# Show-ModuleBanner
+
+
+
+Export-ModuleMember -Function Invoke-Auth,Invoke-Refresh,Invoke-DeviceCodeFlow,Invoke-ParseJwt,Show-EntraTokenAidHelp,Invoke-ClientCredential
+
+
