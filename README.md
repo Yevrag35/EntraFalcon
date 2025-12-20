@@ -386,6 +386,7 @@ Certain API permissions allow an application to directly escalate to Global Admi
 | Files.ReadWrite.All                                  | High     | 863451e7-0667-486c-a5d6-d135439485f0   |
 | DeviceLocalCredential.Read.All                       | High     | 9917900e-410b-4d15-846e-42a357488545   |
 | AdministrativeUnit.ReadWrite.All                     | High     | 7b8a2d34-6b3f-4542-a343-54651608ad81   |
+| Directory.AccessAsUser.All                           | High     | 0e263e50-5827-48a4-b97c-d940288653c7   |
 | User.ReadWrite.All                                   | Medium   | 204e0828-b5ca-4ad8-b9f3-f32a958e7cc4   |
 | Chat.ReadWrite.All                                   | Medium   | 7e9a077b-3711-42b9-b7cb-5fa5f3f7fea7   |
 | Mail.Read                                            | Medium   | 570282fd-fa5c-430d-a7fd-fc8dc98a9dca   |

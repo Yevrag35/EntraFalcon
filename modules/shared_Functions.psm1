@@ -2707,6 +2707,7 @@ $global:GLOBALApiPermissionCategorizationList= @{
     "3011c876-62b7-4ada-afa2-506cbbecc68c" = "High" #User.EnableDisableAccount.All
     "8e8e4742-1d95-4f68-9d56-6ee75648c72a" = "High" #DelegatedPermissionGrant.ReadWrite.All
     "01c0a623-fc9b-48e9-b794-0756f8e8f067" = "High" #Policy.ReadWrite.ConditionalAccess
+    "0e263e50-5827-48a4-b97c-d940288653c7" = "High" #Directory.AccessAsUser.All
     "9241abd9-d0e6-425a-bd4f-47ba86e767a4" = "High" #DeviceManagementConfiguration.ReadWrite.All
     "e330c4f0-4170-414e-a55a-2f022ec2b57b" = "High" #DeviceManagementRBAC.ReadWrite.Al
     "19dbc75e-c2e2-444c-a770-ec69d8559fc7" = "High" #Directory.ReadWrite.All
