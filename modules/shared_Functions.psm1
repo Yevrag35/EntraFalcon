@@ -2335,18 +2335,13 @@ $global:GLOBALCss = @"
 
 # Check if MS Graph is authenticated; if not, call the function for interactive sign-in
 function EnsureAuthMsGraph {
-    [CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$true)][String[]]$AuthMethod
-    )
-
     $result = $false
     if (AuthCheckMSGraph) {
         write-host "[+] MS Graph session OK"
         $result = $true
         
     } else {
-        if (AuthenticationMSGraph -AuthMethod $AuthMethod) {
+        if (AuthenticationMSGraph) {
             write-host "[+] MS Graph successfully authenticated"
             $result = $true
         } else {
@@ -2518,25 +2513,8 @@ function checkSubscriptionNative {
 
 #Function to perform MSGraph authentication using EntraTokenAid
 function AuthenticationMSGraph {
-    [CmdletBinding()]
-    Param (
-        [Parameter(Mandatory=$true)][String[]]$AuthMethod
-    )
-
-    if ($AuthMethod -eq "AuthCode") {
-        $tokens = Invoke-Auth -DisableJwtParsing @GLOBALAuthParameters
-        $global:GLOBALMsGraphAccessToken = $tokens
-
-    } elseif ($AuthMethod -eq "DeviceCode"){
-        $tokens = Invoke-DeviceCodeFlow -DisableJwtParsing @GLOBALAuthParameters
-        $global:GLOBALMsGraphAccessToken = $tokens
-
-    } elseif ($AuthMethod -eq "ManualCode"){
-        $tokens = Invoke-Auth -DisableJwtParsing -ManualCode @GLOBALAuthParameters
-        $global:GLOBALMsGraphAccessToken = $tokens
-        
-    } else {
-        Write-host "[!] Invalid AuthMethod provided"
+    if (-not (invoke-EntraFalconAuth -Action Auth -Purpose MainAuth @GLOBALAuthMethods)) {
+        throw "[!] Authentication failed for MainAuth"
     }
 
     if (AuthCheckMSGraph) {
@@ -2553,7 +2531,7 @@ function AuthenticationMSGraph {
 function AuthenticationAzurePSNative {
    
     #Get tokens for Azure ARM API
-    $GLOBAL:GLOBALArmAccessToken = Invoke-Refresh -RefreshToken $GLOBALMsGraphAccessToken.refresh_token -Api management.azure.com -DisableJwtParsing @GLOBALAuthParameters
+    invoke-EntraFalconAuth -Action Auth -Purpose Azure @GLOBALAuthMethods
     if (AuthCheckAzPSnative) {
         $result = $true
     } else {
@@ -2567,9 +2545,7 @@ return $result
 #Refresh MS Graph session
 function RefreshAuthenticationMsGraph {
     $result = $true
-    $tokens = Invoke-Refresh -RefreshToken $GLOBALMsGraphAccessToken.refresh_token -DisableJwtParsing @GLOBALAuthParameters
-
-    $global:GLOBALMsGraphAccessToken = $tokens
+    invoke-EntraFalconAuth -Action Refresh -Purpose MainAuth @GLOBALAuthMethods
 
     if (AuthCheckMSGraph) {
         $result = $true
@@ -3257,9 +3233,7 @@ function Get-ConditionalAccessPolicies {
 #Authenticate using an refresh token and get a new token for PIM
 function Invoke-MsGraphAuthPIM {
 
-    write-host "[*] Refresh to Managed Meeting Rooms client"
-    #Alternative: 50aaa389-5a33-4f1a-91d7-2c45ecd8dac8 (Azure PIM)
-    $global:GLOBALPIMsGraphAccessToken = Invoke-Refresh -RefreshToken $GLOBALMsGraphAccessToken.refresh_token -clientid "eb20f3e3-3dce-4d2c-b721-ebb8d4414067" -DisableJwtParsing @GLOBALAuthParameters
+    Invoke-EntraFalconAuth -Action Auth -Purpose PimforEntra @GLOBALAuthMethods
     
     #Abort if error
     if ($GLOBALPIMsGraphAccessToken) {
@@ -3284,8 +3258,7 @@ function Invoke-MsGraphAuthPIM {
 #Refresh PIM token
 function Invoke-MsGraphRefreshPIM {
 
-    write-host "[*] Refresh PIM access token"
-    $global:GLOBALPIMsGraphAccessToken = Invoke-Refresh -RefreshToken $GLOBALPIMsGraphAccessToken.refresh_token -clientid "eb20f3e3-3dce-4d2c-b721-ebb8d4414067" -DisableJwtParsing @GLOBALAuthParameters
+    invoke-EntraFalconAuth -Action Refresh -Purpose PimforEntra @GLOBALAuthMethods
     
 }
 
@@ -3471,18 +3444,12 @@ function Get-PimforGroupsAssignments {
     $ResultAuthCheck = $true
     
     Write-Host "[*] Trigger interactive authentication for PIM for Groups assessment (skip with -SkipPimForGroups)"
-    if ($AuthMethod -eq "AuthCode") {
-        $tokens = Invoke-Auth -ClientID '1b730954-1685-4b74-9bfd-dac224a7b894' -RedirectUrl 'https://login.microsoftonline.com/common/oauth2/nativeclient' -DisableJwtParsing @GLOBALAuthParameters
-    } elseif ($AuthMethod -eq "DeviceCode"){
-        $tokens = Invoke-DeviceCodeFlow -ClientID '1b730954-1685-4b74-9bfd-dac224a7b894' -DisableJwtParsing @GLOBALAuthParameters
-    } elseif ($AuthMethod -eq "ManualCode"){
-        $tokens = Invoke-Auth -ManualCode -ClientID '1b730954-1685-4b74-9bfd-dac224a7b894' -RedirectUrl 'https://login.microsoftonline.com/common/oauth2/nativeclient' -DisableJwtParsing @GLOBALAuthParameters
-    } else {
-        Write-host "[!] Invalid AuthMethod provided"
+    if (-not (invoke-EntraFalconAuth -Action Auth -Purpose PimforGroup @GLOBALAuthMethods)) {
+        throw "[!] Authentication failed for PimforGroup"
     }
 
     try {
-        $AuthCheck = Send-GraphRequest -AccessToken $tokens.access_token -Method GET -Uri '/me?$select=id' -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -erroraction Stop
+        $AuthCheck = Send-GraphRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Method GET -Uri '/me?$select=id' -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -erroraction Stop
     } catch {
         write-host "[!] Auth error: $($_.Exception.Message -split '\n')"
         $ResultAuthCheck = $false
@@ -3495,13 +3462,59 @@ function Get-PimforGroupsAssignments {
 
         #Retrieve Pim Enabled groups. If HTTP 400 assuing error message is "The tenant needs to have Microsoft Entra ID P2 or Microsoft Entra ID Governance license.",
         try {
-            $PimEnabledGroupsRaw = Send-GraphRequest -AccessToken $tokens.access_token -Method GET -Uri "/privilegedAccess/aadGroups/resources" -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -erroraction Stop
-        } catch {
-            if ($($_.Exception.Message) -match "Status: 400") {
-                write-host "[!] HTTP 400 Error: Most likely due to missing Entra ID premium licence. Assuming no PIM for Groups is used."
-            } else {
-                write-host "[!] Auth error: $($_.Exception.Message -split '\n'). Assuming no PIM for Groups is used."
+            #Use alternative Endpoint for BroCI since no SP with pre-consented privieleges PrivilegedAccess.Read(Write).AzureADGroup exists
+            if ($GLOBALAuthMethods.ContainsKey("BroCi")) {
+                Write-Host "[*] Retrieve PIM enabled groups (BroCi / using api.azrbac.mspim.azure.com)"
+                $headers = @{
+                    Authorization = "Bearer $($GLOBALPimForGroupAzrbacAccessToken.access_token)"
+                    "User-Agent"  = $GlobalAuditSummary.UserAgent.Name
+                }
+
+                $uri = "https://api.azrbac.mspim.azure.com/api/v2/privilegedAccess/aadGroups/resources?`$select=id,displayName&`$top=999"
+
+                # Collect all pages
+                $all = New-Object System.Collections.Generic.List[object]
+
+                do {
+                    $resp = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -ErrorAction Stop
+
+                    if ($resp.value) {
+                        foreach ($item in $resp.value) { [void]$all.Add($item) }
+                    }
+
+                    # Some endpoints return nextLink as a property literally named "@odata.nextLink"
+                    $uri = $resp.'@odata.nextLink'
+                }
+                while (-not [string]::IsNullOrWhiteSpace($uri))
+
+                $PimEnabledGroupsRaw = $all
             }
+
+            else {
+                Write-Host "[*] Retrieve PIM enabled groups (Graph)"
+                $PimEnabledGroupsRaw = Send-GraphRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Method GET -Uri "/privilegedAccess/aadGroups/resources" -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+            }
+        }
+        catch {
+            # Normalize status code detection across both request styles
+            $statusCode = $null
+
+            # Invoke-RestMethod / Invoke-WebRequest often expose a Response with StatusCode
+            if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+            elseif ($_.Exception.Message -match "Status:\s*(\d{3})") {
+                $statusCode = [int]$Matches[1]
+            }
+
+            if ($statusCode -eq 400) {
+                Write-Host "[!] HTTP 400 Error: Most likely due to missing Entra ID premium licence. Assuming no PIM for Groups is used." -ForegroundColor Yellow
+            }
+            else {
+                $msg = ($_.Exception.Message -split "`n")[0]
+                Write-Host "[!] Auth/Request error: $msg. Assuming no PIM for Groups is used." -ForegroundColor Yellow
+            }
+
             $PIMforGroupsAssignments = ""
             $proceed = $false
         }
@@ -3537,7 +3550,7 @@ function Get-PimforGroupsAssignments {
                 }
     
                 # Send Batch request
-                $PIMforGroupsAssignments = (Send-GraphBatchRequest -AccessToken $tokens.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)).response.value
+                $PIMforGroupsAssignments = (Send-GraphBatchRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)).response.value
                 Write-Host "[+] Got $($PIMforGroupsAssignments.Count) objects eligible for a PIM-enabled group"
                 
             } else {
@@ -3737,6 +3750,407 @@ function Format-ReportSection {
     return $sb.ToString()
 }
 
+
+function invoke-EntraFalconAuth {
+    <#
+    .SYNOPSIS
+    Routes and executes Entra ID, Microsoft Graph, PIM, and Azure ARM authentication or token refresh flows.
+
+    .DESCRIPTION
+    invoke-EntraFalconAuth is an internal orchestration helper that selects and executes the correct authentication
+    or token refresh routine based on Action, Purpose, AuthMethod, and whether the BroCi flow is enabled.
+
+    The function supports standard OAuth authentication (AuthCode, DeviceCode, ManualCode), token refresh and
+    token exchange scenarios, as well as the BroCi flow with optional Bring-Your-Own BroCi refresh token support.
+    When a BroCi token is supplied, the initial BroCi bootstrap authentication step is skipped and the provided
+    token is used directly for subsequent token exchanges.
+
+    The function prints a short status message, invokes the required underlying helper functions
+    (Invoke-Auth, Invoke-DeviceCodeFlow, Invoke-Refresh), stores resulting tokens in predefined global variables,
+    and returns $true on success or $false on failure.
+
+    DeviceCode authentication is not supported with BroCi and will throw.
+
+    .PARAMETER AuthMethod
+    Specifies the authentication method to use when Action is Auth.
+    Valid values: AuthCode, DeviceCode, ManualCode, Refresh.
+    Note: When a BroCi token is supplied, AuthMethod is ignored for the BroCi bootstrap step.
+
+    .PARAMETER BroCi
+    Enables the BroCi authentication flow, which uses alternate client and redirect parameters and may perform
+    additional token exchange steps.
+
+    .PARAMETER BroCiToken
+    Optional BroCi refresh token provided by the caller.
+    When specified, the BroCi bootstrap authentication step is skipped and the provided token is used directly.
+
+    .PARAMETER Action
+    Specifies whether to authenticate or refresh tokens.
+    Valid values: Auth, Refresh.
+
+    .PARAMETER Purpose
+    Specifies which token to obtain or refresh.
+    Valid values: MainAuth, PimforEntra, PimforGroup, Azure.
+
+    .OUTPUTS
+    System.Boolean.
+    Returns $true when the selected flow completes successfully; otherwise returns $false.
+    Throws for invalid parameter combinations.
+
+    .EXAMPLE
+    invoke-EntraFalconAuth -Action Auth -Purpose MainAuth -AuthMethod DeviceCode
+
+    .EXAMPLE
+    invoke-EntraFalconAuth -Action Auth -Purpose MainAuth -AuthMethod AuthCode -BroCi -BroCiToken $BroCiRefreshToken
+
+    .EXAMPLE
+    invoke-EntraFalconAuth -Action Auth -Purpose PimforEntra -AuthMethod Refresh
+
+    .EXAMPLE
+    invoke-EntraFalconAuth -Action Refresh -Purpose MainAuth -BroCi
+    #>
+
+    [CmdletBinding()]
+    param(
+        # Authentication method
+        [ValidateSet("AuthCode", "DeviceCode", "ManualCode", "Refresh")]
+        [string]$AuthMethod = "AuthCode",
+
+        [Parameter(Mandatory = $false)]
+        [switch]$BroCi = $false,
+
+        # Action
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Auth", "Refresh")]
+        [string]$Action,
+
+        # Purpose
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("MainAuth", "PimforEntra", "PimforGroup", "Azure")]
+        [string]$Purpose,
+
+        #BrociToken
+        [Parameter(Mandatory = $false)]
+        [string]$BroCiToken
+
+    )
+
+    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Starting authentication: Action=$Action Purpose=$Purpose AuthMethod=$AuthMethod BroCi=$BroCi"
+
+    if ($BroCi -and $AuthMethod -eq "DeviceCode") {
+        throw "Invalid parameter combination: -AuthMethod DeviceCode cannot be used with -BroCi"
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($BroCiToken)) {
+        $BroCiTokenObj = [pscustomobject]@{ refresh_token = $BroCiToken }
+    } else {
+        $BroCiTokenObj = $null
+    }
+
+    function Get-Plan {
+        param(
+            [hashtable]$Table,
+            [string[]]$Keys
+        )
+        $node = $Table
+        foreach ($k in $Keys) {
+            if ($node -isnot [hashtable] -or -not $node.ContainsKey($k)) {
+                return $null
+            }
+            $node = $node[$k]
+        }
+        return $node
+    }
+
+    function Get-EntraFalconStatusMessage {
+        param(
+            [ValidateSet("Auth", "Refresh")]
+            [string]$Action,
+
+            [ValidateSet("MainAuth", "PimforEntra", "PimforGroup", "Azure")]
+            [string]$Purpose,
+
+            [bool]$BroCi,
+
+            [ValidateSet("AuthCode", "DeviceCode", "ManualCode", "Refresh")]
+            [string]$AuthMethod
+        )
+
+        $modeText = if ($BroCi) { " (BroCi)" } else { "" }
+
+        switch ($Action) {
+            'Auth' {
+                if ($AuthMethod -eq 'Refresh') {
+                    return "[*] Exchanging token for $Purpose$modeText"
+                }
+                return "[*] Authenticating for $Purpose using $AuthMethod$modeText"
+            }
+            'Refresh' {
+                return "[*] Refreshing $Purpose access token$modeText"
+            }
+        }
+    }
+
+    # --------------------------
+    # ROUTING TABLE ("plans")
+    # --------------------------
+    $Routes = @{
+        Auth = @{
+            NoBroCi = @{
+                MainAuth = @{
+                    AuthCode = {
+                        $tokens = Invoke-Auth -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALMsGraphAccessToken = $tokens
+                        $true
+                    }
+                    DeviceCode = {
+                        $tokens = Invoke-DeviceCodeFlow -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALMsGraphAccessToken = $tokens
+                        $true
+                    }
+                    ManualCode = {
+                        $tokens = Invoke-Auth -DisableJwtParsing -ManualCode @GLOBALAuthParameters
+                        $global:GLOBALMsGraphAccessToken = $tokens
+                        $true
+                    }
+                }
+
+                PimforGroup = @{
+                    AuthCode = {
+                        $tokens = Invoke-Auth -ClientID '1b730954-1685-4b74-9bfd-dac224a7b894' `
+                                             -RedirectUrl 'https://login.microsoftonline.com/common/oauth2/nativeclient' `
+                                             -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPimForGroupAccessToken = $tokens
+                        $true
+                    }
+                    DeviceCode = {
+                        $tokens = Invoke-DeviceCodeFlow -ClientID '1b730954-1685-4b74-9bfd-dac224a7b894' `
+                                                       -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPimForGroupAccessToken = $tokens
+                        $true
+                    }
+                    ManualCode = {
+                        $tokens = Invoke-Auth -ManualCode `
+                                             -ClientID '1b730954-1685-4b74-9bfd-dac224a7b894' `
+                                             -RedirectUrl 'https://login.microsoftonline.com/common/oauth2/nativeclient' `
+                                             -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPimForGroupAccessToken = $tokens
+                        $true
+                    }
+                }
+
+                Azure = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALMsGraphAccessToken.refresh_token `
+                                                -Api management.azure.com `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALArmAccessToken = $tokens
+                        $true
+                    }
+                }
+
+                PimforEntra = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALMsGraphAccessToken.refresh_token `
+                                                -ClientId "eb20f3e3-3dce-4d2c-b721-ebb8d4414067" `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPIMsGraphAccessToken = $tokens
+                        $true
+                    }
+                }
+            }
+
+            BroCi = @{
+                MainAuth = @{
+                    AuthCode = {
+                        # If caller provided a BroCi token use it
+                        if ($BroCiTokenObj) {
+                            $global:GLOBALBrociAccessToken = $BroCiTokenObj
+                        } else {
+                            $tokens = Invoke-Auth -ClientID "c44b4083-3bb0-49c1-b47d-974e53cbdf3c" `
+                                                -RedirectUrl "https://startups.portal.azure.com/auth/login/" `
+                                                -Origin "https://doesnotmatter" `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                            $global:GLOBALBrociAccessToken = $tokens
+                        }
+
+
+                        $tokensIbiza = Invoke-Refresh -RefreshToken $GLOBALBrociAccessToken.refresh_token `
+                                                     -ClientID '74658136-14ec-4630-ad9b-26e160ff0fc6' `
+                                                     -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                     -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
+                                                     -Origin 'https://portal.azure.com'
+                        $global:GLOBALMsGraphAccessToken = $tokensIbiza
+                        $true
+                    }
+
+                    ManualCode = {
+                        # If caller provided a BroCi token use it
+                         if ($BroCiTokenObj) {
+                            $global:GLOBALBrociAccessToken = $BroCiTokenObj
+                        } else {
+                            $tokens = Invoke-Auth -ClientID 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                -RedirectUrl 'https://startups.portal.azure.com/auth/login/' `
+                                                -Origin 'https://doesnotmatter' `
+                                                -DisableJwtParsing -ManualCode @GLOBALAuthParameters
+                            $global:GLOBALBrociAccessToken = $tokens
+                        }
+
+                        $tokensIbiza = Invoke-Refresh -RefreshToken $GLOBALBrociAccessToken.refresh_token `
+                                                     -ClientID '74658136-14ec-4630-ad9b-26e160ff0fc6' `
+                                                     -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                     -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
+                                                     -Origin 'https://portal.azure.com'
+                        $global:GLOBALMsGraphAccessToken = $tokensIbiza
+                        $true
+                    }
+
+                    
+                }
+
+                PimforGroup = @{
+                    Any = {
+                        #Note: Maybe use the Ibiza Token
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALBrociAccessToken.refresh_token `
+                                                -ClientID '50aaa389-5a33-4f1a-91d7-2c45ecd8dac8' `
+                                                -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
+                                                -Origin 'https://portal.azure.com' `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPimForGroupAccessToken = $tokens
+
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALBrociAccessToken.refresh_token `
+                                                -ClientID '50aaa389-5a33-4f1a-91d7-2c45ecd8dac8' `
+                                                -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
+                                                -Api 'api.azrbac.mspim.azure.com' `
+                                                -Origin 'https://portal.azure.com' `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPimForGroupAzrbacAccessToken = $tokens
+                        $true
+                    }
+                }
+
+                Azure = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALBrociAccessToken.refresh_token `
+                                                -ClientID '74658136-14ec-4630-ad9b-26e160ff0fc6' `
+                                                -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
+                                                -Origin 'https://portal.azure.com' `
+                                                -Api "management.azure.com" `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALArmAccessToken = $tokens
+                        $true
+                    }
+                }
+
+                PimforEntra = @{
+                    Any = {
+                        #Note: Maybe use the Ibiza Token
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALBrociAccessToken.refresh_token `
+                                                -ClientID '74658136-14ec-4630-ad9b-26e160ff0fc6' `
+                                                -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
+                                                -Origin 'https://portal.azure.com' `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPIMsGraphAccessToken = $tokens
+                        $true
+                    }
+                }
+            }
+        }
+
+        Refresh = @{
+            NoBroCi = @{
+                MainAuth = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALMsGraphAccessToken.refresh_token `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALMsGraphAccessToken = $tokens
+                        $true
+                    }
+                }
+                PimforEntra = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALPIMsGraphAccessToken.refresh_token `
+                                                -ClientId "eb20f3e3-3dce-4d2c-b721-ebb8d4414067" `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPIMsGraphAccessToken = $tokens
+                        $true
+                    }
+                }
+            }
+
+            BroCi = @{
+                MainAuth = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALBrociAccessToken.refresh_token `
+                                                -ClientID '74658136-14ec-4630-ad9b-26e160ff0fc6' `
+                                                -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
+                                                -Origin 'https://portal.azure.com' `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALMsGraphAccessToken = $tokens
+                        $true
+                    }
+                }
+                PimforEntra = @{
+                    Any = {
+                        $tokens = Invoke-Refresh -RefreshToken $GLOBALBrociAccessToken.refresh_token `
+                                                -ClientID '74658136-14ec-4630-ad9b-26e160ff0fc6' `
+                                                -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
+                                                -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
+                                                -Origin 'https://portal.azure.com' `
+                                                -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPIMsGraphAccessToken = $tokens
+                        $true
+                    }
+                }
+            }
+        }
+    }
+
+    # --------------------------
+    # EXECUTION
+    # --------------------------
+    $broKey = if ($BroCi) { 'BroCi' } else { 'NoBroCi' }
+
+    try {
+        $plan = Get-Plan -Table $Routes -Keys @($Action, $broKey, $Purpose, $AuthMethod)
+
+        #Fallback to any if no explicit is found
+        if (-not $plan -and $Action -eq "Auth") {
+            $plan = Get-Plan -Table $Routes -Keys @($Action, $broKey, $Purpose, "Any")
+        }
+
+        # If action is Refresh, authmethod isn't relevant: fall back to 'Any'
+        if (-not $plan -and $Action -eq 'Refresh') {
+            $plan = Get-Plan -Table $Routes -Keys @($Action, $broKey, $Purpose, 'Any')
+        }
+
+        if (-not $plan) {
+            return $false
+        }
+
+        $status = Get-EntraFalconStatusMessage `
+            -Action $Action `
+            -Purpose $Purpose `
+            -BroCi ([bool]$BroCi) `
+            -AuthMethod $AuthMethod
+
+        Write-Host $status
+
+        & $plan
+    }
+    catch {
+        Write-Host "[!] Authentication flow failed for $Purpose" -ForegroundColor Red
+        return $false
+    }
+}
+
+
+
 # Remove global variables
 function start-CleanUp {
     remove-variable -Scope Global GLOBALMsGraphAccessToken -ErrorAction SilentlyContinue
@@ -3760,6 +4174,11 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALImpactScore -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPIMsGraphAccessToken -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPIMForEntraRolesChecked -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALBrociAccessToken -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALPimForGroupAccessToken -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAuthMethods -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALPimForGroupAzrbacAccessToken -ErrorAction SilentlyContinue
+    
 }
 
 function Write-LogVerbose {

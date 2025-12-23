@@ -36,7 +36,18 @@
     - `AuthCode` (default): Interactive browser login using legacy .NET
     - `DeviceCode`: Device Code Flow for environments without a browser
     - `ManualCode`: Outputs an auth URL for use on a separate device, and requires manual input of the authorization code
-    
+    Note: When a BroCi token is supplied, AuthMethod is ignored for the BroCi bootstrap step.
+
+    .PARAMETER BroCi
+    Enables the BroCi authentication flow, which uses alternate client and redirect parameters and may perform
+    additional token exchange steps.
+
+    .PARAMETER BroCiToken
+    Optional Bring Your Own BroCi refresh token.
+    When specified, BroCi mode is implicitly enabled and the BroCi bootstrap authentication step is skipped.
+    The provided token must be a valid refresh token for the Azure Portal client (c44b4083-3bb0-49c1-b47d-974e53cbdf3c).
+    Treat this value as sensitive secret material.
+
     .PARAMETER SkipPimForGroups
     Skips the enumeration of PIM for Groups, avoiding the need for a secondary authentication flow.
 
@@ -75,6 +86,9 @@ Param (
     [switch]$DisableCAE = $false,
 
     [Parameter(Mandatory=$false)]
+    [switch]$BroCi = $false,
+
+    [Parameter(Mandatory=$false)]
     [string]$Tenant,
 
     [Parameter(Mandatory = $false)]
@@ -91,6 +105,9 @@ Param (
     [switch]$QAMode = $false,
 
     [Parameter(Mandatory = $false)]
+    [string]$BroCiToken,
+
+    [Parameter(Mandatory = $false)]
     [switch]$ManualCode #Alias because of EntraTokenAid error message
 )
 
@@ -99,8 +116,35 @@ if ($ManualCode.IsPresent) {
     $AuthMethod = "ManualCode"
 }
 
+if ($BroCi -and $AuthMethod -eq "DeviceCode") {
+    Write-Error "Invalid parameter combination: -AuthMethod DeviceCode cannot be used with -BroCi" -ErrorAction Stop
+}
+
 #Constants
-$EntraFalconVersion = "V20251208"
+$EntraFalconVersion = "V20251222"
+
+
+#Splat AuthMethods
+$Global:GLOBALAuthMethods = @{ 
+    AuthMethod = $AuthMethod
+    Verbose = $VerbosePreference
+ }
+if ($BroCi) { $GLOBALAuthMethods.BroCi = $true }
+if (-not [string]::IsNullOrWhiteSpace($BroCiToken)) {
+
+    # Access tokens (JWT) typically start with 'ey'
+    if ($BroCiToken.StartsWith("ey")) {
+        Write-Error "Invalid -BroCiToken: access token (JWT) detected. A refresh token is required." -ErrorAction Stop
+    }    
+
+    # Must look like a refresh token (Azure refresh tokens usually start with "1.")
+    if (-not $BroCiToken.StartsWith("1.")) {
+        Write-Error "Invalid -BroCiToken: expected a refresh token starting with '1.'." -ErrorAction Stop
+    }
+    $GLOBALAuthMethods.BroCiToken = $BroCiToken
+    $GLOBALAuthMethods.BroCi = $true
+}
+
 
 #Define additional authentication parameters
 $Global:GLOBALAuthParameters = @{}
@@ -145,6 +189,12 @@ Start-InitTasks -EntraFalconVersion $EntraFalconVersion -UserAgent $UserAgent
 Show-EntraFalconBanner -EntraFalconVersion $EntraFalconVersion
 
 
+write-host ""
+write-host "********************************** Main Authentication **********************************"
+# Perform authentication check and authenticate if required
+if (-Not(EnsureAuthMsGraph)) {
+    Return
+}
 
 if (-not($SkipPimForGroups)) {
 write-host ""
@@ -154,13 +204,6 @@ write-host "********************************** PIM for Groups: Pre-Collection Ph
     $global:GLOBALPimForGroupsChecked = $false
 }
 
-
-write-host ""
-write-host "********************************** Main Authentication **********************************"
-# Perform authentication check and authenticate if required
-if (-Not(EnsureAuthMsGraph -AuthMethod $AuthMethod)) {
-    Return
-}
 
 write-host ""
 write-host "********************************** Gather Basic Data **********************************"

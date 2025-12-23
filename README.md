@@ -71,9 +71,11 @@ Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process
 The tool includes built-in support for Entra ID authentication using a custom forked PowerShell module.
 You can choose from multiple authentication flows depending on your environment and preference.
 
-> ⚠️ **Note:** Two separate authentications are required.  
+> ⚠️ **Note:** By default, two separate authentications may be required.  
 > This is due to the need for a special first-party client with elevated scopes to access **PIM for Groups** data.  
+> With `-BroCi` (and especially `-BroCiToken`), the additional interactive authentication for PIM for Groups can often be avoided.  
 > You can skip the enumeration of PIM for Groups (and thus the first authentication) by using the `-SkipPimForGroups` switch.
+
 
 #### Auth Code Flow (default) (Windows only)
 
@@ -97,6 +99,19 @@ You can choose from multiple authentication flows depending on your environment 
 3. Complete the authentication.
 4. Copy the final redirect URL (containing the authorization code) to your clipboard.
 5. Continue the script, which will automatically read the code from your clipboard and proceed with token acquisition.
+
+#### Use BroCi flow
+BroCi uses alternate first-party apps and requires less interactive authentication.
+It is useful, for example, when the first-party app *Azure Active Directory PowerShell* requires an assignment and you need to avoid it.
+
+```powershell
+.\run_EntraFalcon.ps1 -BroCi
+```
+If you already have a valid Azure Portal refresh token (client `c44b4083-3bb0-49c1-b47d-974e53cbdf3c`), you can use it directly:
+```powershell
+.\run_EntraFalcon.ps1 -BroCiToken $BroCiRefreshToken
+```
+
 
 ### Other Options
 
@@ -123,6 +138,8 @@ This skips the additional authentication needed to access PIM for Groups data.
 | **LimitResults**       | Limits the number of groups and users in the report (after sorting by risk). Useful for large tenants.                           | -                                                 |
 | **Verbose**            | Enables detailed output. Useful for troubleshooting and monitoring progress in large tenants.                                    | -                                                 |
 | **ApiTop**             | Sets the max number of objects returned from the API. Lower values reduce timeout risk (HTTP 504), but increase request count.   | `999` (Valid range: 5–999)                        |
+| **BroCi** | Enables BroCi authentication flow (alternate first-party client/redirect + token exchange). | `false` |
+| **BroCiToken** | Optional Azure Portal **refresh token** used for BroCi. If set, no interactive authentication is required. | - |
 
 
 ## 📊 Some Example Reports
@@ -414,7 +431,7 @@ Certain API permissions allow an application to directly escalate to Global Admi
 
 </details>
 
-### Microsft First Party Enterprise Applications
+### Microsoft First Party Enterprise Applications
 By default, Microsoft applications are filtered out to simplify the review of Enterprise Applications. Use the `-IncludeMsApps` switch to include them. Applications from the following tenants are treated as Microsoft-owned:
 - f8cdef31-a31e-4b4a-93e4-5f571e91255a
 - 72f988bf-86f1-41af-91ab-2d7cd011db47
@@ -527,6 +544,7 @@ The following table roughly summarizes the checks performed, along with their im
 ## 🛡️ Detection
 EntraFalcon is not stealthy and can be detected in environments where Microsoft Graph API and Azure sign-in activity are logged and monitored.
 
+### Default Authentication Used
 When a full enumeration is performed, the tool actively initiates two interactive logins and two non-interactive logins (refresh to another API and another FOCI client):
 |Application ID|Type|Resource ID|Purpose|
 |-|-|-|-|
@@ -535,6 +553,19 @@ When a full enumeration is performed, the tool actively initiates two interactiv
 |eb20f3e3-3dce-4d2c-b721-ebb8d4414067|Non-Interactive|00000003-0000-0000-c000-000000000000|Retrieve PIM for Entra / Azure roles|
 |04b07795-8ddb-461a-bbee-02f9e1bf7b46|Non-Interactive|797f4846-ba00-4fd7-ba43-dac1f8f63013|Retrieve Azure IAM role assignment data|
 
+### BroCi Authentication Used
+When BroCi authentication is used, only one interactive login occurs.
+|Application ID|Type|Resource ID|Purpose|
+|-|-|-|-|
+|c44b4083-3bb0-49c1-b47d-974e53cbdf3c|Interactive|00000003-0000-0000-c000-000000000000|Initial auth to use the refresh token for BroCi|
+|50aaa389-5a33-4f1a-91d7-2c45ecd8dac8|Non-Interactive|00000003-0000-0000-c000-000000000000|Retrieve PIM for Groups data|
+|50aaa389-5a33-4f1a-91d7-2c45ecd8dac8|Non-Interactive|01fc33a7-78ba-4d2f-a4b7-768e336e890e|Retrieve PIM for Groups data|
+|74658136-14ec-4630-ad9b-26e160ff0fc6|Non-Interactive|00000003-0000-0000-c000-000000000000|Retrieve general tenant object data|
+|74658136-14ec-4630-ad9b-26e160ff0fc6|Non-Interactive|797f4846-ba00-4fd7-ba43-dac1f8f63013|Retrieve Azure IAM role assignment data|
+
+When BroCi is enabled, EntraFalcon also queries `api.azrbac.mspim.azure.com` for PIM for Groups.
+
+### Details
 For data collection, the tool sends multiple requests to the Microsoft Graph API and, optionally, the Azure ARM API—one or more per object. Where possible, it leverages the Graph Batch endpoint to reduce the number of individual requests and improve efficiency.
 
 Interactive sign-ins use the browser's User-Agent. All non-interactive sign-ins and API requests (Graph and ARM) use EntraFalcon as the User-Agent, unless changed with the -UserAgent parameter.
