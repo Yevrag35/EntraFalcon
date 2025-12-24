@@ -1331,43 +1331,23 @@ $global:GLOBALJavaScript = @'
         })();
 
         // ###################################### SECTION for DETAILS ######################################
-        // Parse object details JSON
-        const rawElement = document.getElementById('object-data');
+        const objectDataEl = document.getElementById('object-data');
         let objects = [];
 
-        if (rawElement && rawElement.textContent.trim()) {
+        if (objectDataEl && objectDataEl.textContent.trim()) {
             try {
-                const parsedJson = JSON.parse(rawElement.textContent);
+                const parsedJson = JSON.parse(objectDataEl.textContent);
                 objects = Array.isArray(parsedJson) ? parsedJson : [parsedJson];
             } catch (e) {
-                console.warn("JSON parsing failed or no valid data found for object-data:", e);
+                console.warn("JSON parsing failed for object-data:", e);
+                objects = [];
             }
-        } else {
-            console.log("No object-data element found or it's empty.");
         }
 
-        if (!Array.isArray(objects)) {
-            objects = [objects]; // wrap single object in array
-        }
+        const objectContainer = document.getElementById('object-container');
 
-        const container = document.getElementById('object-container');
-
-        if (container) {
-            container.innerHTML = '';
-
-            const rawElement = document.getElementById('object-data');
-            let objects = [];
-
-            if (rawElement && rawElement.textContent.trim()) {
-                try {
-                    const parsedJson = JSON.parse(rawElement.textContent);
-                    objects = Array.isArray(parsedJson) ? parsedJson : [parsedJson];
-                } catch (e) {
-                    console.warn("JSON parsing failed or no valid data found for object-data:", e);
-                }
-            } else {
-                console.log("No object-data element found or it's empty.");
-            }
+        if (objectContainer) {
+            objectContainer.innerHTML = '';
 
             const renderTable = (title, data) => {
                 const section = document.createElement('div');
@@ -1451,7 +1431,7 @@ $global:GLOBALJavaScript = @'
                     }
                 }
 
-                container.appendChild(details);
+                objectContainer.appendChild(details);
             });
 
             window.addEventListener('DOMContentLoaded', scrollToObjectByHash);
@@ -1866,7 +1846,6 @@ $global:GLOBALCss = @"
 
     thead tr:first-child th {
         position: sticky;
-        top: 0;
         top: 50px;
         z-index: 2;
     }
