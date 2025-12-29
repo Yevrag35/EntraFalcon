@@ -519,10 +519,15 @@ function Invoke-CheckAppRegistrations {
             $AppLock = $true
         }
 
-        #Calculate days since creation
+        # Calculate days since creation
         $CreationInDays = if ($item.createdDateTime) {
-            (New-TimeSpan -Start $item.createdDateTime.ToUniversalTime()).Days
-        } else { "-" }
+            $created = [datetime]::Parse($item.createdDateTime, [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
+
+            (New-TimeSpan -Start $created -End (Get-Date).ToUniversalTime()).Days
+        } else {
+            "-"
+        }
 
         #SP as owner
         if (($AppOwnerSPs | Measure-Object).count -ge 1) {

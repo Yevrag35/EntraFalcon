@@ -546,10 +546,15 @@ function Invoke-CheckManagedIdentities {
             }
         }
 
-        #Calculate days since creation
+        # Calculate days since creation
         $CreationInDays = if ($item.createdDateTime) {
-            (New-TimeSpan -Start $item.createdDateTime.ToUniversalTime()).Days
-        } else { "-" }
+            $created = [datetime]::Parse($item.createdDateTime, [Globalization.CultureInfo]::InvariantCulture,
+                [Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal)
+
+            (New-TimeSpan -Start $created -End (Get-Date).ToUniversalTime()).Days
+        } else {
+            "-"
+        }
 
         # Build the warning parts dynamically
         [string[]]$severities = @()
@@ -990,7 +995,7 @@ Appendix: Used API permission reference
 
     #It could be that the tenant does not contain managed identities.
     if ($ManagedIdentitiesCount -ge 1) {
-        
+
         # Create and sort the permission appendix
         $ApiPermissionReference =
             $details |
