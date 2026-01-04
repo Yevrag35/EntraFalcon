@@ -20,7 +20,7 @@ Findings are presented in interactive HTML reports to support efficient explorat
 ## 🚀 Features
 
 - Simple PowerShell script compatible with PowerShell 5.1 and 7. Works on both Windows and Linux with no external dependencies.
-- Built-in authentication supporting multiple methods (Interactive Authorization Code Flow and Device Code flow)
+- Built-in authentication supporting multiple methods (Interactive Authorization Code Flow and Device Code Flow)
 - Uses first-party Microsoft applications with pre-consented scopes to bypass Graph API consent prompts
 - Generates navigable HTML reports that support filtering, sorting, data export, etc.
 - Performs basic impact, likelihood, and risk scoring to highlight weakly protected high-privilege objects and sort the data.
@@ -328,7 +328,7 @@ Certain API permissions allow an application to directly escalate to Global Admi
 | DelegatedPermissionGrant.ReadWrite.All                      | High       | 8e8e4742-1d95-4f68-9d56-6ee75648c72a   |
 | Policy.ReadWrite.ConditionalAccess                          | High       | 01c0a623-fc9b-48e9-b794-0756f8e8f067   |
 | DeviceManagementConfiguration.ReadWrite.All                 | High       | 9241abd9-d0e6-425a-bd4f-47ba86e767a4   |
-| DeviceManagementRBAC.ReadWrite.Al                           | High       | e330c4f0-4170-414e-a55a-2f022ec2b57b   |
+| DeviceManagementRBAC.ReadWrite.All                          | High       | e330c4f0-4170-414e-a55a-2f022ec2b57b   |
 | Directory.ReadWrite.All                                     | High       | 19dbc75e-c2e2-444c-a770-ec69d8559fc7   |
 | Group.ReadWrite.All                                         | High       | 62a82d76-70ea-41e2-9197-370581804d09   |
 | GroupMember.ReadWrite.All                                   | High       | dbaae8cf-10b5-4b86-a4a1-f871c94c6695   |
@@ -431,7 +431,7 @@ Certain API permissions allow an application to directly escalate to Global Admi
 
 </details>
 
-### Microsoft First Party Enterprise Applications
+### Microsoft First-Party Enterprise Applications
 By default, Microsoft applications are filtered out to simplify the review of Enterprise Applications. Use the `-IncludeMsApps` switch to include them. Applications from the following tenants are treated as Microsoft-owned:
 - f8cdef31-a31e-4b4a-93e4-5f571e91255a
 - 72f988bf-86f1-41af-91ab-2d7cd011db47
@@ -527,10 +527,10 @@ The following table roughly summarizes the checks performed, along with their im
 |PIMSettings|AuthContext linked CAP: Sign-In Frequency|-|Yes|
 |PIMSettings|AuthContext linked CAP: MFA or AuthStrength|-|Yes|
 |PIMSettings|AuthContext linked CAP: Enabled|-|Yes|
-|PIMSettings|AuthContext linked CAP: Included/Exluded users/groups/networks|-|Yes|
+|PIMSettings|AuthContext linked CAP: Included/Excluded users/groups/networks|-|Yes|
 |PIMSettings|AuthContext linked CAP: Conditions|-|Yes|
 |PIMSettings|Activation MFA|-|No|
-|PIMSettings|Activation justifcation or ticket|-|Yes|
+|PIMSettings|Activation justification or ticket|-|Yes|
 |PIMSettings|Activation duration|-|Yes|
 |PIMSettings|Activation approval|-|Yes|
 |PIMSettings|Eligible assignment expiration|-|No|
