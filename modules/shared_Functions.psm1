@@ -3958,7 +3958,7 @@ function invoke-EntraFalconAuth {
                                                      -ClientID '74658136-14ec-4630-ad9b-26e160ff0fc6' `
                                                      -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
                                                      -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
-                                                     -Origin 'https://portal.azure.com'
+                                                     -Origin 'https://portal.azure.com' @GLOBALAuthParameters
                         $global:GLOBALMsGraphAccessToken = $tokensIbiza
                         $true
                     }
@@ -3979,7 +3979,7 @@ function invoke-EntraFalconAuth {
                                                      -ClientID '74658136-14ec-4630-ad9b-26e160ff0fc6' `
                                                      -BrkClientId 'c44b4083-3bb0-49c1-b47d-974e53cbdf3c' `
                                                      -RedirectUri 'brk-c44b4083-3bb0-49c1-b47d-974e53cbdf3c://portal.azure.com' `
-                                                     -Origin 'https://portal.azure.com'
+                                                     -Origin 'https://portal.azure.com' @GLOBALAuthParameters
                         $global:GLOBALMsGraphAccessToken = $tokensIbiza
                         $true
                     }
