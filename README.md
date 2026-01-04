@@ -100,7 +100,7 @@ You can choose from multiple authentication flows depending on your environment 
 4. Copy the final redirect URL (containing the authorization code) to your clipboard.
 5. Continue the script, which will automatically read the code from your clipboard and proceed with token acquisition.
 
-#### Use BroCi flow
+#### Use BroCi flow (Beta)
 BroCi uses alternate first-party apps and requires less interactive authentication.
 It is useful, for example, when the first-party app *Azure Active Directory PowerShell* requires an assignment and you need to avoid it.
 
