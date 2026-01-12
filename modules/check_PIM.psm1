@@ -22,7 +22,10 @@ function Invoke-CheckPIM {
     #Function to parse ISO8601 used in PIM
     function Parse-ISO8601Duration {
         param (
-            [string]$DurationString
+            [string]$DurationString,
+
+            [ValidateSet('Hours','Days')]
+            [string]$ReturnUnit = 'Hours'
         )
 
         $result = [PSCustomObject]@{
@@ -30,34 +33,46 @@ function Invoke-CheckPIM {
             Unit  = $null
         }
 
-        if ($null -eq $DurationString -or $DurationString -eq '') {
+        if ([string]::IsNullOrWhiteSpace($DurationString)) {
             return $result
         }
 
-        switch -Regex ($DurationString) {
-            '^P(?<Days>\d+)D$' {
-                $result.Value = [int]$matches['Days']
+        $pattern = '^P(?:(?<Days>\d+)D)?(?:T(?:(?<Hours>\d+)H)?(?:(?<Minutes>\d+)M)?(?:(?<Seconds>\d+)S)?)?$'
+        $match = [regex]::Match($DurationString.Trim(), $pattern)
+
+        if (-not $match.Success) {
+            $result.Unit = 'Unknown'
+            return $result
+        }
+
+        $days    = if ($match.Groups['Days'].Success)    { [int]$match.Groups['Days'].Value }    else { 0 }
+        $hours   = if ($match.Groups['Hours'].Success)   { [int]$match.Groups['Hours'].Value }   else { 0 }
+        $minutes = if ($match.Groups['Minutes'].Success) { [int]$match.Groups['Minutes'].Value } else { 0 }
+        $seconds = if ($match.Groups['Seconds'].Success) { [int]$match.Groups['Seconds'].Value } else { 0 }
+
+        if (($days + $hours + $minutes + $seconds) -eq 0) {
+            $result.Unit = 'Unknown'
+            return $result
+        }
+
+        $timeSpan = New-TimeSpan -Days $days -Hours $hours -Minutes $minutes -Seconds $seconds
+
+        switch ($ReturnUnit) {
+            'Days' {
+                $result.Value = [math]::Round($timeSpan.TotalDays, 2)
                 $result.Unit  = 'Days'
             }
-            '^PT(?<Hours>\d+)H$' {
-                $result.Value = [int]$matches['Hours']
+            'Hours' {
+                $result.Value = [math]::Round($timeSpan.TotalHours, 2)
                 $result.Unit  = 'Hours'
-            }
-            '^PT(?<Minutes>\d+)M$' {
-                $result.Value = [int]$matches['Minutes']
-                $result.Unit  = 'Minutes'
-            }
-            '^PT(?<Seconds>\d+)S$' {
-                $result.Value = [int]$matches['Seconds']
-                $result.Unit  = 'Seconds'
-            }
-            default {
-                $result.Unit = 'Unknown'
             }
         }
 
         return $result
     }
+
+
+
 
 
     ########################################## SECTION: DATACOLLECTION ##########################################
@@ -214,12 +229,12 @@ function Invoke-CheckPIM {
             $claimValue = $ruleMap["AuthenticationContext_EndUser_Assignment"].claimValue
         }
 
-        # Extract Expiration_EndUser_Assignment
+        # Extract Expiration_EndUser_Assignment aka Activation maximum duration (hours)
         $durationRaw = $null
         if ($ruleMap.ContainsKey("Expiration_EndUser_Assignment")) {
             $expirationRule = $ruleMap["Expiration_EndUser_Assignment"]
             $durationRaw = $expirationRule.maximumDuration
-            $parsedDuration = Parse-ISO8601Duration -DurationString $durationRaw
+            $parsedActivationDuration = Parse-ISO8601Duration -DurationString $durationRaw -ReturnUnit 'Hours'
         }
 
         # Extract Expiration_Admin_Eligibility
@@ -233,7 +248,7 @@ function Invoke-CheckPIM {
 
         # Display the value even if it's set, as it doesn't affect the outcome
         if ($adminEligibilityEnabled) {
-            $parsedAdminEligibilityDuration = Parse-ISO8601Duration -DurationString $adminEligibilityDurationRaw
+            $parsedAdminEligibilityDuration = Parse-ISO8601Duration -DurationString $adminEligibilityDurationRaw -ReturnUnit 'Days'
             $parsedAdminEligibilityDurationValue = $parsedAdminEligibilityDuration.Value
             $parsedAdminEligibilityDurationUnit = $parsedAdminEligibilityDuration.Unit
         } else {
@@ -253,7 +268,7 @@ function Invoke-CheckPIM {
 
         # Even if a value is set display - because it does not matter
         if ($adminAssignmentEnabled) {
-            $parsedAdminAssignmentDuration = Parse-ISO8601Duration -DurationString $adminAssignmentDurationRaw
+            $parsedAdminAssignmentDuration = Parse-ISO8601Duration -DurationString $adminAssignmentDurationRaw -ReturnUnit 'Days'
             $parsedAdminAssignmentDurationValue = $parsedAdminAssignmentDuration.Value
             $parsedAdminAssignmentDurationUnit = $parsedAdminAssignmentDuration.Unit
         } else {
@@ -488,15 +503,16 @@ function Invoke-CheckPIM {
             $AuthContextIssues = "Linked CAP (AuthContext:$($policy.AuthContextId)) issues: $AuthContextIssues"
         }
 
-        #Role checks Tier-0
-        if ($RoleTier -eq "Tier-0") {
-            # Long activation duration
-            if ($parsedDuration.Value -is [int] -and $parsedDuration.Value -gt 4) {
-                $warningMessages += "long activation time (>4h)"
-            }
-        } else {
-            if ($parsedDuration.Value -is [int] -and $parsedDuration.Value -gt 12) {
-                $warningMessages += "long activation time (>12h)"
+        # Role activation time
+        if ($parsedActivationDuration.Unit -eq 'Hours') {
+            if ($RoleTier -eq 'Tier-0') {
+                if ($parsedActivationDuration.Value -gt 4) {
+                    $warningMessages += 'long activation time (>4h)'
+                }
+            } else {
+                if ($parsedActivationDuration.Value -gt 12) {
+                    $warningMessages += 'long activation time (>12h)'
+                }
             }
         }
 
@@ -539,8 +555,8 @@ function Invoke-CheckPIM {
             ActivationJustification   = $justificationEnabled
             ActivationTicketing       = $TicketingEnabled
             ActivationAuthContext     = $authCtxEnabled
-            ActivationDuration        = $parsedDuration.Value
-            ActivationDurationUnit    = $parsedDuration.Unit
+            ActivationDuration        = $parsedActivationDuration.Value
+            ActivationDurationUnit    = $parsedActivationDuration.Unit
             ActivationApproval        = $approvalRequired
             ActivationApprovers       = $approverObjects
 
