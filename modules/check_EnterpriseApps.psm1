@@ -168,6 +168,7 @@ function Invoke-CheckEnterpriseApps {
             ServicePrincipalLockConfiguration = $app.ServicePrincipalLockConfiguration
         }
     }
+    Write-Log -Level Debug -Message "Got $($AppRegistrations.Count) app registrations"
 
     write-host "[*] Get last app last sign-in dates"
     $AppLastSignInsRaw = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/reports/servicePrincipalSignInActivities" -BetaAPI -QueryParameters @{ '$top' = $ApiTop } -UserAgent $($GlobalAuditSummary.UserAgent.Name)
@@ -190,6 +191,7 @@ function Invoke-CheckEnterpriseApps {
             lastSignInDelegatedAsResourceDays = if ($app.delegatedResourceSignInActivity.lastSignInDateTime) { (New-TimeSpan -Start $app.delegatedResourceSignInActivity.lastSignInDateTime).Days } else { "-" }
         }
     }
+    Write-Log -Level Debug -Message "Got $($AppLastSignInsRaw.Count) app last sign-in dates"
 
     Write-Host "[*] Get all applications API permissions assignments"
     $Requests = @()
@@ -201,13 +203,15 @@ function Invoke-CheckEnterpriseApps {
         }
     }
     # Send Batch request and create a hashtable
-    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI  -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
     $AppAssignmentsRaw = @{}
     foreach ($item in $RawResponse) {
         if ($item.response.value -and $item.response.value.Count -gt 0) {
             $AppAssignmentsRaw[$item.id] = $item.response.value
         }
     }
+
+    Write-Log -Level Debug -Message "Got $($AppAssignmentsRaw.Count) applications API permissions assignments"
 
     Write-Host "[*] Get all delegate API permissions"
     $Requests = @()
@@ -226,6 +230,7 @@ function Invoke-CheckEnterpriseApps {
             $DelegatedPermissionRaw[$item.id] = $item.response.value
         }
     }
+    Write-Log -Level Debug -Message "Got $($DelegatedPermissionRaw.Count) delegated API permissions assignments"
 
     Write-Host "[*] Get all applications group memberships"
     $Requests = @()
@@ -244,6 +249,7 @@ function Invoke-CheckEnterpriseApps {
             $GroupMemberRaw[$item.id] = $item.response.value
         }
     }
+    Write-Log -Level Debug -Message "Got $($GroupMemberRaw.Count) group memberships"
 
     Write-Host "[*] Get all applications objects ownerships"
     $Requests = @()
@@ -262,6 +268,7 @@ function Invoke-CheckEnterpriseApps {
             $OwnedObjectsRaw[$item.id] = $item.response.value
         }
     }
+    Write-Log -Level Debug -Message "Got $($OwnedObjectsRaw.Count) owned objects"
 
     Write-Host "[*] Get all owners"
     $Requests = @()
@@ -280,6 +287,7 @@ function Invoke-CheckEnterpriseApps {
             $OwnersRaw[$item.id] = $item.response.value
         }
     }
+    Write-Log -Level Debug -Message "Got $($OwnersRaw.Count) owners"
 
     Write-Host "[*] Get all app roles assignments"
     $Requests = @()
@@ -298,6 +306,7 @@ function Invoke-CheckEnterpriseApps {
             $AppRolesAssignedToRaw[$item.id] = $item.response.value
         }
     }
+    Write-Log -Level Debug -Message "Got $($AppRolesAssignedToRaw.Count) app role assignments"
 
     ########################################## SECTION: Enterprise App Processing ##########################################
 
@@ -350,7 +359,7 @@ function Invoke-CheckEnterpriseApps {
                     })
                 }
             } else {
-                Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "No matching AppRole for ID $($assignment.appRoleId) in App $($app.DisplayName)"
+                Write-Log -Level Debug -Message "No matching AppRole for ID $($assignment.appRoleId) in App $($app.DisplayName)"
             }
         }
     }
@@ -1136,9 +1145,12 @@ function Invoke-CheckEnterpriseApps {
     }
     ########################################## SECTION: POST-PROCESSING ##########################################
     write-host "[*] Post-processing SP ownership relation with other apps"
+    
 
     #Process indirect App ownerships (SP->AppReg->SP) (take over Impact, inherit likelihood)
     $SPOwningApps = $AllServicePrincipal | Where-Object { $_.AppOwn -ge 1 }
+    Write-Log -Level Debug -Message "Number of ownerships SP->AppReg: $($SPOwningApps.count)"
+
     # For each object which owns an App registration
     foreach ($SpObject in $SPOwningApps) {
         
@@ -1170,6 +1182,7 @@ function Invoke-CheckEnterpriseApps {
 
     #Process direct App ownerships (SP->SP) (take over Impact, inherit likelihood)
     $SPOwningSPs = $AllServicePrincipal | Where-Object { $_.SpOwn -ge 1 }
+    Write-Log -Level Debug -Message "Number of ownerships SP->SP: $($SPOwningApps.count)"
     #For each object which owns an App registration
     foreach ($SpOwnerObject in $SPOwningSPs) {
         
@@ -1466,6 +1479,10 @@ function Invoke-CheckEnterpriseApps {
                     }
                     'Group' {
                         $AppRoleMemberLink = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.AppRoleMemberId)>$($object.AppRoleMember)</a>"
+                        break
+                    }
+                    'ServicePrincipal' {
+                        $AppRoleMemberLink = "<a href=#$($object.AppRoleMemberId)>$($object.AppRoleMember)</a>"
                         break
                     }
                     Default {

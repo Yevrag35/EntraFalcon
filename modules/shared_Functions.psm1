@@ -2446,6 +2446,9 @@ function Get-RegisterAuthMethodsUsers {
     foreach ($method in $RegisteredAuthMethods ) {
         $UserAuthMethodsTable[$method.Id] = $method.IsMfaCapable
     }
+
+    Write-Log -Level Verbose -Message "Got $($UserAuthMethodsTable.Count) auth methods"
+
     return $UserAuthMethodsTable
 }
 
@@ -2466,7 +2469,7 @@ function Get-UsersBasic {
     foreach ($user in $RawResponse) {
         $AllUsersBasicHT[$user.id] = $user
     }
-    
+    Write-Log -Level Verbose -Message "Got $($AllUsersBasicHT.count) users"
     return $AllUsersBasicHT
 }
 
@@ -2489,6 +2492,8 @@ function Get-Devices {
     foreach ($device in $DevicesRaw) {
         $Devices[$device.Id] = $device
     }
+
+    Write-Log -Level Verbose -Message "Got $($Devices.Count) devices "
     
     return $Devices
 }
@@ -2976,6 +2981,16 @@ function Get-AllAzureIAMAssignmentsNative {
             managedByTenants  = $_.managedByTenants
         }
     }
+
+    foreach ($sub in $subscriptions) {
+        $managedTenantCount = if ($null -ne $sub.ManagedByTenants) {
+            @($sub.ManagedByTenants).Count
+        } else {
+            0
+        }
+        Write-Log -Level Debug -Message "Subscription $($sub.DisplayName) $($sub.Id) | ManagedByTenants: $managedTenantCount"
+    }
+
 
     foreach ($subscription in $subscriptions) {
         #Get all Azure roles for lookupp
@@ -3861,7 +3876,7 @@ function invoke-EntraFalconAuth {
 
     )
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Starting authentication: Action=$Action Purpose=$Purpose AuthMethod=$AuthMethod BroCi=$BroCi"
+    Write-Log -Level Debug -Message "Starting authentication: Action=$Action Purpose=$Purpose AuthMethod=$AuthMethod BroCi=$BroCi"
 
     if ($BroCi -and $AuthMethod -eq "DeviceCode") {
         throw "Invalid parameter combination: -AuthMethod DeviceCode cannot be used with -BroCi"
@@ -4204,22 +4219,58 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALPimForGroupAccessToken -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAuthMethods -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupAzrbacAccessToken -ErrorAction SilentlyContinue
-    
+    remove-variable -Scope Global GLOBALEntraFalconLogLevel -ErrorAction SilentlyContinue
 }
 
-function Write-LogVerbose {
-    param (
-        [string]$Message,
-        [System.Management.Automation.PSCmdlet]$CallerPSCmdlet
-    )
+enum LogLevel {
+    Off     = 0
+    Verbose = 1
+    Debug   = 2
+    Trace   = 3
+}
 
-    if ($CallerPSCmdlet -and $CallerPSCmdlet.MyInvocation.BoundParameters["Verbose"]) {
-        $timestamp = Get-Date -Format "HH:mm:ss"
-        $CallerPSCmdlet.WriteVerbose("[$timestamp] $Message")
-    } elseif (-not $CallerPSCmdlet) { #Edge case for manual execution
-        Write-Verbose "[$(Get-Date -Format 'HH:mm:ss')] $Message"
+function Get-LogLevel {
+    [CmdletBinding()]
+    param()
+
+    $raw = $global:GLOBALEntraFalconLogLevel
+    if ([string]::IsNullOrWhiteSpace($raw)) {
+        return [LogLevel]::Off
+    }
+
+    try {
+        return [LogLevel]::$raw
+    } catch {
+        return [LogLevel]::Off
     }
 }
+
+function Write-Log {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$Message,
+
+        [Parameter(Mandatory)]
+        [LogLevel]$Level,
+
+        [switch]$Timestamp
+    )
+
+    $currentLevel = Get-LogLevel
+    if ($currentLevel -eq [LogLevel]::Off) { return }
+    if ([int]$Level -gt [int]$currentLevel) { return }
+
+    $prefix = if ($Timestamp) {
+        "[{0}] [{1}]" -f $Level, (Get-Date -Format 'HH:mm:ss')
+    } else {
+        "[{0}]" -f $Level
+    }
+
+    Write-Information "$prefix $Message" -InformationAction Continue
+}
+
+
 
 function Show-EntraFalconBanner {
     [CmdletBinding()]
@@ -4242,4 +4293,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks

@@ -136,10 +136,10 @@ This skips the additional authentication needed to access PIM for Groups data.
 | **Tenant**             | Specifies the tenant (ID or domain) to authenticate against. Useful when assessing a tenant other than the account’s home tenant.| `Account's home tenant`                           |
 | **OutputFolder**       | Output folder where the reports are stored.                                                                                      | `Results_%TenantName%_YYYYMMDD_HHSS`              |
 | **LimitResults**       | Limits the number of groups and users in the report (after sorting by risk). Useful for large tenants.                           | -                                                 |
-| **Verbose**            | Enables detailed output. Useful for troubleshooting and monitoring progress in large tenants.                                    | -                                                 |
+| **LogLevel**           | Controls runtime cli logging verbosity. Supported values: `Off` (default), `Verbose`, `Debug`, `Trace`.                          | `Off`                                             |
 | **ApiTop**             | Sets the max number of objects returned from the API. Lower values reduce timeout risk (HTTP 504), but increase request count.   | `999` (Valid range: 5–999)                        |
-| **BroCi** | Enables BroCi authentication flow (alternate first-party client/redirect + token exchange). | `false` |
-| **BroCiToken** | Optional Azure Portal **refresh token** used for BroCi. If set, no interactive authentication is required. | - |
+| **BroCi**              | Enables BroCi authentication flow (alternate first-party client/redirect + token exchange).                                      | `false`                                           |
+| **BroCiToken**         | Optional Azure Portal **refresh token** used for BroCi. If set, no interactive authentication is required.                       | -                                                 |
 
 
 ## 📊 Some Example Reports

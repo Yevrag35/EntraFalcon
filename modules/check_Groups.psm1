@@ -195,7 +195,7 @@ function Invoke-CheckGroups {
     $PmInitTasks = [System.Diagnostics.Stopwatch]::StartNew()
 
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Start group script"
+    Write-Log -Level Verbose -Message "Start group script"
 
     # Check token and trigger refresh if required
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
@@ -238,7 +238,7 @@ function Invoke-CheckGroups {
 
     
     if ($TenantPimForGroupsAssignments) {
-        Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Processing $($TenantPimForGroupsAssignments.Count) PIM for Groups Assignments"
+        Write-Log -Level Verbose -Message "Processing $($TenantPimForGroupsAssignments.Count) PIM for Groups Assignments"
         # Hashtable for all owners for faster lookup in each group
         $PimForGroupsEligibleOwnersHT = @{}
         $PimForGroupsEligibleOwnerParentGroupHT = @{}
@@ -435,7 +435,7 @@ function Invoke-CheckGroups {
     $ChunkCount = [math]::Ceiling($GroupsTotalCount / $BatchSize)
     
     for ($chunkIndex = 0; $chunkIndex -lt $ChunkCount; $chunkIndex++) {
-        Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Processing batch $($chunkIndex + 1) of $ChunkCount..."                  
+        Write-Log -Level Verbose -Message "Processing batch $($chunkIndex + 1) of $ChunkCount..."                  
     
         $StartIndex = $chunkIndex * $BatchSize
         $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $GroupsTotalCount - 1)
@@ -465,8 +465,8 @@ function Invoke-CheckGroups {
     foreach ($group in $GroupMembers.Values) {
         $TotalGroupMembers += $group.Count
     }
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Got $TotalGroupMembers direct member relationships"
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Build transitive member relationships"
+    Write-Log -Level Verbose -Message "Got $TotalGroupMembers direct member relationships"
+    Write-Log -Level Verbose -Message "Build transitive member relationships"
 
     # Build transitive members for each group
     $TransitiveMembersRaw = @{}
@@ -480,7 +480,7 @@ function Invoke-CheckGroups {
         $TotalTransitiveMemberRelations += $members.Count
     }
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Calculated $TotalTransitiveMemberRelations transitive member relationships"
+    Write-Log -Level Verbose -Message "Calculated $TotalTransitiveMemberRelations transitive member relationships"
     #Show warning in large tenants
     if (-not $LimitResults) {
         if ($TotalTransitiveMemberRelations -ge 1500000 -or $GroupsTotalCount -ge 100000) {
@@ -511,7 +511,7 @@ function Invoke-CheckGroups {
         }
     }
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Got $($GroupOwnersRaw.Count) group ownerships"
+    Write-Log -Level Debug -Message "Got $($GroupOwnersRaw.Count) group ownerships"
 
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
@@ -536,7 +536,7 @@ function Invoke-CheckGroups {
         }
     }
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Got $($AppRoleAssignmentsRaw.Count) app group role assignments"
+    Write-Log -Level Debug -Message "Got $($AppRoleAssignmentsRaw.Count) app group role assignments"
 
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
@@ -569,7 +569,7 @@ function Invoke-CheckGroups {
         }
     }
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Got $($GroupNestedInRaw.Count) groups with parent group relationship"
+    Write-Log -Level Debug -Message "Got $($GroupNestedInRaw.Count) groups with parent group relationship"
 
 
     #Basic ServicePrincipal Info to avoid storing the information in a large object
@@ -1316,7 +1316,7 @@ function Invoke-CheckGroups {
 
     # Reprocessing nested groups in groups which give access to potential critical ressources -> Nested group is adjusted
     # Note: Nested groups do not inherit AppRoles
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Processing $($NestedGroupsHighvalue.Count) high value groups with nestings"
+    Write-Log -Level Debug -Message "Processing $($NestedGroupsHighvalue.Count) high value groups with nestings"
     # Tracks already processed groupID→targetID combinations
     $processedGroupHighValuePairs = New-Object System.Collections.Generic.HashSet[string]
 
@@ -1379,9 +1379,9 @@ function Invoke-CheckGroups {
     $GroupsWithNestings = $AllGroupsDetails | Where-Object { $_.NestedGroups -ge 1 }
 
     $GroupsWithNestingsCount = $($GroupsWithNestings.Count)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Processing $GroupsWithNestingsCount groups with nesting"
+    Write-Log -Level Debug -Message "Processing $GroupsWithNestingsCount groups with nesting"
     $StatusUpdateInterval = [Math]::Max([Math]::Floor($GroupsWithNestingsCount / 10), 1)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Status: Processing group 1 of $GroupsWithNestingsCount (updates every $StatusUpdateInterval groups)..."
+    Write-Log -Level Debug -Message "Status: Processing group 1 of $GroupsWithNestingsCount (updates every $StatusUpdateInterval groups)..."
     $ProgressCounter = 0
         
 
@@ -1392,7 +1392,7 @@ function Invoke-CheckGroups {
 
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $GroupsWithNestingsCount) {
-            Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "[*] Status: Processing group $ProgressCounter of $GroupsWithNestingsCount ..."
+            Write-Log -Level Debug -Message "[*] Status: Processing group $ProgressCounter of $GroupsWithNestingsCount ..."
         }
 
 
@@ -1449,7 +1449,7 @@ function Invoke-CheckGroups {
     }
 
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Processed all groups with nestings"
+    Write-Log -Level Debug -Message "Processed all groups with nestings"
 
     $PmDataPostProcessing.Stop()
     ########################################## SECTION: OUTPUT DEFINITION ##########################################
@@ -1504,7 +1504,7 @@ function Invoke-CheckGroups {
     # Progress status in verbose mode
     $detailsCount = $details.count
     $StatusUpdateInterval = [Math]::Max([Math]::Floor($detailsCount / 10), 1)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Status: Processing group 1 of $detailsCount (updates every $StatusUpdateInterval groups)..."
+    Write-Log -Level Debug -Message "Status: Processing group 1 of $detailsCount (updates every $StatusUpdateInterval groups)..."
     $ProgressCounter = 0
 
     $DetailTxtBuffer = [System.Text.StringBuilder]::new()
@@ -1529,7 +1529,7 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
         # Progress status in verbose mode
         $ProgressCounter++
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $detailsCount) {
-            Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "[*] Status: Processing group $ProgressCounter of $detailsCount ..."
+            Write-Log -Level Debug -Message "[*] Status: Processing group $ProgressCounter of $detailsCount ..."
         }
 
         $ReportingAU = [System.Collections.Generic.List[object]]::new()
@@ -2458,16 +2458,16 @@ Appendix: Dynamic Groups
     $PmEndTasks.Stop()
     $PmScript.Stop()
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "=== Performance Summary ==="
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Init Tasks:           {0:N2} s" -f $PmInitTasks.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Data Collection:      {0:N2} s" -f $PmDataCollection.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Data Processing:      {0:N2} s" -f $PmDataProcessing.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Post-Processing:      {0:N2} s" -f $PmDataPostProcessing.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Generating Details:   {0:N2} s" -f $PmGeneratingDetails.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Writing Reports:      {0:N2} s" -f $PmWritingReports.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("EndTasks:             {0:N2} s" -f $PmEndTasks.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("-------------------------------")
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Total Script Time:    {0:N2} s" -f $PmScript.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message "=== Performance Summary ==="
+    Write-Log -Level Debug -Message ("Init Tasks:           {0:N2} s" -f $PmInitTasks.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Data Collection:      {0:N2} s" -f $PmDataCollection.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Data Processing:      {0:N2} s" -f $PmDataProcessing.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Post-Processing:      {0:N2} s" -f $PmDataPostProcessing.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Generating Details:   {0:N2} s" -f $PmGeneratingDetails.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Writing Reports:      {0:N2} s" -f $PmWritingReports.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("EndTasks:             {0:N2} s" -f $PmEndTasks.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("-------------------------------")
+    Write-Log -Level Debug -Message ("Total Script Time:    {0:N2} s" -f $PmScript.Elapsed.TotalSeconds)
 
     return $AllGroupsDetailsHT
 }

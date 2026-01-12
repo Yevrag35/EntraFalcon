@@ -316,7 +316,7 @@ function ConvertTo-Yaml {
             }
         }
     }
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Prepared HT HighTierAssignments $($HighTierAssignments.Count)"
+    Write-Log -Level Debug -Message "Prepared HT HighTierAssignments $($HighTierAssignments.Count)"
 
     # Hashtable to store scoped role info by RoleDefinitionId
     # Used to identify scoped assignments which are not working in CAPs targeting roles
@@ -341,7 +341,7 @@ function ConvertTo-Yaml {
             }
         }
     }
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Prepared HT ScopedAssignments $($ScopedAssignments.Count)"
+    Write-Log -Level Debug -Message "Prepared HT ScopedAssignments $($ScopedAssignments.Count)"
 
 
     if ($AllPoliciesCount -gt 0) {
@@ -356,7 +356,7 @@ function ConvertTo-Yaml {
             $EnterpriseAppsHT[$app.AppId] = $app.DisplayName
         }
 
-        Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Prepared HT EnterpriseApps $($EnterpriseAppsHT.Count)"
+        Write-Log -Level Debug -Message "Prepared HT EnterpriseApps $($EnterpriseAppsHT.Count)"
         
         #Get all role templates to resolve GUIDs
         $QueryParameters = @{
@@ -369,7 +369,7 @@ function ConvertTo-Yaml {
             $RoleTemplatesHT[$role.Id] = $role.DisplayName
         }
 
-        Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Prepared HT RoleTemplates $($RoleTemplates.Count)"
+        Write-Log -Level Debug -Message "Prepared HT RoleTemplates $($RoleTemplates.Count)"
     }
 
     ########################################## SECTION: Processing ##########################################

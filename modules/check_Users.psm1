@@ -33,7 +33,7 @@ function Invoke-CheckUsers {
     $PmScript = [System.Diagnostics.Stopwatch]::StartNew()
     $PmInitTasks = [System.Diagnostics.Stopwatch]::StartNew()
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Start user script"
+    Write-Log -Level Verbose -Message "Start user script"
 
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
@@ -109,7 +109,8 @@ function Invoke-CheckUsers {
 
     }
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Create AU mapping"
+    Write-Log -Level Debug -Message "Create AU mapping"
+
     # Create a hashtable: UserId -> List of Admin Units
     $UserToAUMap = @{}
 
@@ -188,7 +189,7 @@ function Invoke-CheckUsers {
     $ChunkCount = [math]::Ceiling($AllUsers.Count / $BatchSize)
 
     for ($chunkIndex = 0; $chunkIndex -lt $ChunkCount; $chunkIndex++) {
-        Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Processing user batch $($chunkIndex + 1) of $ChunkCount..."
+        Write-Log -Level Verbose -Message "Processing user batch $($chunkIndex + 1) of $ChunkCount..." 
 
         $StartIndex = $chunkIndex * $BatchSize
         $EndIndex = [math]::Min($StartIndex + $BatchSize - 1, $AllUsers.Count - 1)
@@ -232,7 +233,7 @@ function Invoke-CheckUsers {
         $TotalTransitiveMemberRelations += $members.Count
     }
 
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Got transitive member relationships: $TotalTransitiveMemberRelations"
+    Write-Log -Level Verbose -Message "Got transitive member relationships: $TotalTransitiveMemberRelations"
     #Show warning in large tenants
     if (-not $LimitResults) {
         if ($TotalTransitiveMemberRelations -ge 1500000 -or $UsersTotalCount -ge 100000) {
@@ -423,7 +424,7 @@ function Invoke-CheckUsers {
                     }
         
                     default {
-                        Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Unknown owned object type: $($OwnedObject.'@odata.type') for user $($user.Id)"
+                        Write-Log -Level Debug -Message "Unknown owned object type: $($OwnedObject.'@odata.type') for user $($user.Id)"
                     }
                 }
             }
@@ -1008,7 +1009,7 @@ function Invoke-CheckUsers {
     # Progress status in verbose mode
     $detailsCount = $details.count
     $StatusUpdateInterval = [Math]::Max([Math]::Floor($detailsCount / 10), 1)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Status: Processing user 1 of $detailsCount (updates every $StatusUpdateInterval groups)..."
+    Write-Log -Level Verbose -Message "Status: Processing user 1 of $detailsCount (updates every $StatusUpdateInterval users)..."
     $ProgressCounter = 0    
 
     #Enum the details
@@ -1017,7 +1018,7 @@ function Invoke-CheckUsers {
         # Progress status in verbose mode
         $ProgressCounter++
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $detailsCount) {
-            Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "Status: Processing user $ProgressCounter of $detailsCount ..."
+            Write-Log -Level Verbose -Message "Status: Processing user $ProgressCounter of $detailsCount ..."
         }
 
         $ReportingUserInfo = @()
@@ -1611,16 +1612,16 @@ Execution Warnings = $($WarningReport  -join ' / ')
 
     $PmEndTasks.Stop()
     $PmScript.Stop()
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message "=== Performance Summary ==="
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Init Tasks:           {0:N2} s" -f $PmInitTasks.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Data Collection:      {0:N2} s" -f $PmDataCollection.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Data Processing:      {0:N2} s" -f $PmDataProcessing.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Post-Processing:      {0:N2} s" -f $PmDataPostProcessing.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Generating Details:   {0:N2} s" -f $PmGeneratingDetails.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Writing Reports:      {0:N2} s" -f $PmWritingReports.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("EndTasks:             {0:N2} s" -f $PmEndTasks.Elapsed.TotalSeconds)
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("-------------------------------")
-    Write-LogVerbose -CallerPSCmdlet $PSCmdlet -Message ("Total Script Time:    {0:N2} s" -f $PmScript.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message "=== Performance Summary ==="
+    Write-Log -Level Debug -Message ("Init Tasks:           {0:N2} s" -f $PmInitTasks.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Data Collection:      {0:N2} s" -f $PmDataCollection.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Data Processing:      {0:N2} s" -f $PmDataProcessing.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Post-Processing:      {0:N2} s" -f $PmDataPostProcessing.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Generating Details:   {0:N2} s" -f $PmGeneratingDetails.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("Writing Reports:      {0:N2} s" -f $PmWritingReports.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("EndTasks:             {0:N2} s" -f $PmEndTasks.Elapsed.TotalSeconds)
+    Write-Log -Level Debug -Message ("-------------------------------")
+    Write-Log -Level Debug -Message ("Total Script Time:    {0:N2} s" -f $PmScript.Elapsed.TotalSeconds)
 
     Return $UsersHT
 

@@ -124,6 +124,7 @@ function Invoke-CheckRoles {
                 DisplayNameLink = $ObjectID
                 Type = "Unknown Object"
             }
+            Write-Log -Level Debug -Message "Unknown Object: $ObjectID"
             Return $object
         }
     }
