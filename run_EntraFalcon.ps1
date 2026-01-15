@@ -59,11 +59,11 @@
     Controls runtime status output.
     - `Off` (default): No additional status output
     - `Verbose`: High-level status messages
-    - `Debug`: Includes Verbose plus additional details usful for debugging
+    - `Debug`: Includes Verbose plus additional details useful for debugging
     - `Trace`: Includes Debug plus very detailed output (may be noisy)
 
     .PARAMETER QAMode
-    Dumps the AllGroups and AllUsers objects as JSON for QA tests.
+    Dumps the AllGroups and AllUsers objects as JSON for internal QA tests.
 
     .NOTES
     Author: Christian Feuchter, Compass Security Switzerland AG, https://www.compass-security.com/
@@ -129,14 +129,30 @@ if ($BroCi -and $AuthMethod -eq "DeviceCode") {
 }
 
 #Constants
-$EntraFalconVersion = "V20260112"
+$EntraFalconVersion = "V20260115"
+
+# Import shared functions
+$ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
+Import-Module (Join-Path $ScriptRoot 'modules\EntraTokenAid.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\shared_Functions.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\check_Groups.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\check_EnterpriseApps.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\check_AppRegistrations.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\check_Users.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\check_ManagedIdentities.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\check_Roles.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\check_CAPs.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\Send-GraphBatchRequest.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\Send-GraphRequest.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\export_Summary.psm1') -Force
+Import-Module (Join-Path $ScriptRoot 'modules\check_PIM.psm1') -Force
 
 
 #Splat AuthMethods
 $Global:GLOBALAuthMethods = @{ 
     AuthMethod = $AuthMethod
-    Verbose = $VerbosePreference
  }
+
 if ($BroCi) { $GLOBALAuthMethods.BroCi = $true }
 if (-not [string]::IsNullOrWhiteSpace($BroCiToken)) {
 
@@ -179,20 +195,6 @@ if ($QAMode) {
     $optionalParamsUserandGroup['QAMode'] = $QAMode
 }
 
-# Import shared functions
-import-module ./modules/shared_Functions.psm1 -force
-import-module ./modules/check_Groups.psm1 -force
-import-module ./modules/check_EnterpriseApps.psm1 -force
-import-module ./modules/check_AppRegistrations.psm1 -force
-import-module ./modules/check_Users.psm1 -force
-import-module ./modules/check_ManagedIdentities.psm1 -force
-import-module ./modules/check_Roles.psm1 -force
-import-module ./modules/check_CAPs.psm1 -force
-import-module ./modules/Send-GraphBatchRequest.psm1 -force
-import-module ./modules/Send-GraphRequest.psm1 -force
-import-module ./modules/export_Summary.psm1 -force
-import-module ./modules/check_PIM.psm1 -force
-
 #Define summary array and show banner
 Start-InitTasks -EntraFalconVersion $EntraFalconVersion -UserAgent $UserAgent
 Show-EntraFalconBanner -EntraFalconVersion $EntraFalconVersion
@@ -204,6 +206,7 @@ write-host "********************************** Main Authentication *************
 if (-Not(EnsureAuthMsGraph)) {
     Return
 }
+
 
 if (-not($SkipPimForGroups)) {
 write-host ""
@@ -221,6 +224,10 @@ $CurrentTenant = Get-OrgInfo
 $StartTimestamp = Get-Date -Format "yyyyMMdd_HHmm"
 $GlobalAuditSummary.Tenant.Name = $CurrentTenant.DisplayName
 $GlobalAuditSummary.Tenant.Id = $CurrentTenant.Id
+
+$licenseResult = Get-EffectiveEntraLicense
+$GlobalAuditSummary.TenantLicense.Name  = $licenseResult.EntraIDLicencesString
+$GlobalAuditSummary.TenantLicense.Level = $licenseResult.EntraIDLicencesInt
 
 #Define output folder if not defined
 if ($null -eq $OutputFolder -or "" -eq $OutputFolder) {

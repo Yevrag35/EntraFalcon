@@ -4,7 +4,6 @@
 #>
 
 ############################## Static variables ########################
-import-module ./modules/EntraTokenAid.psm1 -force
 
 $global:GLOBALMainTableDetailsHEAD = @'
 <div id="mainTableContainer">
@@ -3772,8 +3771,9 @@ function start-InitTasks {
 
     $Global:GlobalAuditSummary = @{
         Time                   = @{ Start = Get-Date -Format "yyyyMMdd HH:mm"; End = ""}
-        Tenant                 = @{ Name = "" ; Id = "" }
+        Tenant                 = @{ Name = ""; Id = "" }
         EntraFalcon            = @{ Version = "$EntraFalconVersion"; Source = "https://github.com/CompassSecurity/EntraFalcon" }
+        TenantLicense          = @{ Name = ""; Level = 0}
         Subscriptions          = @{ Count = 0 }
         UserAgent              = @{ Name = $UserAgent}
         Users                  = @{ Count = 0; Guests = 0; Inactive = 0; Enabled=0; OnPrem=0; MfaCapable=0; SignInActivity = @{ '0-1 month' = 0; '1-2 months' = 0; '2-3 months' = 0; '4-5 months' = 0; '5-6 months' = 0; '6+ months' = 0; 'Never' = 0 }}
@@ -3789,6 +3789,81 @@ function start-InitTasks {
         Errors                 = @()
     }
 }
+
+
+#Function to get the applied Entra teant license
+function Get-EffectiveEntraLicense {
+    [CmdletBinding()]
+
+    $planPriority = @(
+        @{ Plan = 'AAD_PREMIUM_P2'; Name = 'Microsoft Entra ID P2';    Int = 4 }
+        @{ Plan = 'AAD_PREMIUM';    Name = 'Microsoft Entra ID P1';    Int = 3 }
+        @{ Plan = 'AAD_BASIC';      Name = 'Microsoft Entra ID Basic'; Int = 2 }
+        @{ Plan = 'AAD_FREE';       Name = 'Microsoft Entra ID Free';  Int = 1 }
+    )
+
+    $QueryParameters = @{
+        '$select' = "capabilityStatus,servicePlans"
+    }
+    try {
+        $response = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/subscribedSkus' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
+    } catch {
+        Write-Log -Level Debug -Message "Can't get Entra Tenant license. Request to /subscribedSkus failed"
+        return [pscustomobject]@{
+            EntraIDLicencesString = 'Unknown'
+            EntraIDLicencesInt    = 0
+        }
+    }
+    $skus =
+        if ($null -eq $response) { @() }
+        elseif ($response -is [System.Collections.IEnumerable] -and -not ($response -is [string])) { @($response) }
+        elseif ($response.PSObject.Properties.Name -contains 'value') { @($response.value) }
+        else { @($response) }
+
+    # Entra Free does not have any SKUs
+    if ($skus.Count -eq 0) {
+        return [pscustomobject]@{
+            EntraIDLicencesString = 'Microsoft Entra ID Free'
+            EntraIDLicencesInt    = 1
+        }
+    }
+
+    $observedPlans = New-Object System.Collections.Generic.HashSet[string]
+
+    foreach ($sku in $skus) {
+        if ($null -eq $sku) { continue }
+
+        $capabilityStatus = $sku.capabilityStatus
+        if ($capabilityStatus -ne 'Enabled' -and $capabilityStatus -ne 'Warning') { continue }
+
+        foreach ($plan in @($sku.servicePlans)) {
+            if ($null -eq $plan) { continue }
+
+            if ($plan.provisioningStatus -ne 'Success') { continue }
+
+            $servicePlanName = [string]$plan.servicePlanName
+            [void]$observedPlans.Add($servicePlanName)
+        }
+    }
+
+    foreach ($item in $planPriority) {
+        if ($observedPlans.Contains($item.Plan)) {
+            Write-Log -Level Verbose -Message "Entra Tenant license: $($item.Name)"
+            return [pscustomobject]@{
+                EntraIDLicencesString = $item.Name
+                EntraIDLicencesInt    = $item.Int
+            }
+        }
+    }
+
+    Write-Log -Level Verbose -Message "Entra Tenant license: Unknown"
+    return [pscustomobject]@{
+        EntraIDLicencesString = 'Unknown'
+        EntraIDLicencesInt    = 0
+    }
+}
+
+
 
 # Function to help built the TXT report (avoiding using slow stuff like format-table)
 function Format-ReportSection {
@@ -4328,4 +4403,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks

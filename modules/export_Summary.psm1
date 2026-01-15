@@ -94,6 +94,7 @@ return @"
     $headerHTML = [pscustomobject]@{ 
         "Tenant Name"                           = $($GlobalAuditSummary.Tenant.Name)
         "Tenant ID"                             = $($GlobalAuditSummary.Tenant.ID)
+        "Tenant License"                        = $($GlobalAuditSummary.TenantLicense.Name)
         "Subscriptions"                         = $SubscriptionCount
         "Start Time"                            = $($GlobalAuditSummary.Time.Start)
         "End Time"                              = $($GlobalAuditSummary.Time.End)
@@ -704,14 +705,15 @@ $CustomCss = @"
 
 $OutputCLI = @"
 Execution Information:
-    - Tenant Name:   $($GlobalAuditSummary.Tenant.Name)
-    - Tenant ID:     $($GlobalAuditSummary.Tenant.ID)
-    - Subscriptions: $SubscriptionCount
-    - Start:         $($GlobalAuditSummary.Time.Start)
-    - End:           $($GlobalAuditSummary.Time.End)
-    - EntraFalcon:   $($GlobalAuditSummary.EntraFalcon.Version)
-    - PowerShell:    V$($PSVersionTable.PSVersion.ToString())
-    - UserAgent:     $($GlobalAuditSummary.UserAgent.Name)
+    - Tenant Name:    $($GlobalAuditSummary.Tenant.Name)
+    - Tenant ID:      $($GlobalAuditSummary.Tenant.ID)
+    - Tenant License: $($GlobalAuditSummary.TenantLicense.Name)
+    - Subscriptions:  $SubscriptionCount
+    - Start:          $($GlobalAuditSummary.Time.Start)
+    - End:            $($GlobalAuditSummary.Time.End)
+    - EntraFalcon:    $($GlobalAuditSummary.EntraFalcon.Version)
+    - PowerShell:     V$($PSVersionTable.PSVersion.ToString())
+    - UserAgent:      $($GlobalAuditSummary.UserAgent.Name)
 
 Enhanced Checks:
     - Enumerate Azure IAM:                  $GLOBALAzurePsChecks
