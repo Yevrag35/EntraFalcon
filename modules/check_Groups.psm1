@@ -2353,8 +2353,6 @@ Appendix: Dynamic Groups
     $PmGeneratingDetails.Stop()
     $PmWritingReports = [System.Diagnostics.Stopwatch]::StartNew()
 
-        # -ScriptWarnings $GroupScriptWarningList
-
     # Set generic information which get injected into the HTML
     Set-GlobalReportManifest -CurrentReportKey 'Groups' -CurrentReportName 'Groups Enumeration' -Warnings $GroupScriptWarningList
 

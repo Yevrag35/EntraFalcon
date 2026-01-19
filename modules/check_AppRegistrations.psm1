@@ -73,7 +73,7 @@ function Invoke-CheckAppRegistrations {
                     Users  = $MatchingGroup.Users
                     Guests  = $MatchingGroup.Guests
                     Owners  = $MatchingGroup.DirectOwners + $MatchingGroup.NestedOwners
-                    LikelihoodScore  = $MatchingGroup.LikelihoodScore
+                    LikelihoodScore  = $MatchingGroup.Likelihood
                 }
             }
         }
@@ -338,12 +338,10 @@ function Invoke-CheckAppRegistrations {
         # Iterate through arrays and check for matches
         foreach ($key in $AppRedirectURL.Keys) {
             foreach ($RedirectURL in $AppRedirectURL[$key]) {
+                if ([string]::IsNullOrWhiteSpace($RedirectURL)) { continue }
                 foreach ($pattern in $RedirectPatterns) {
-                    # Treat the pattern as a literal string (escaping special characters like `*`)
-                    $escapedPattern = [regex]::Escape($pattern.Pattern)
-                    
-                    # Check if the item contains the pattern as a substring
-                    if ($RedirectURL -match $escapedPattern) {
+                    # Use wildcard matching so patterns with '*' work as intended.
+                    if ($RedirectURL -like $pattern.Pattern) {
                         $FindingsRedirectUrls += [PSCustomObject]@{
                             Match      = $RedirectURL
                             Pattern    = $pattern.Pattern
@@ -755,7 +753,6 @@ function Invoke-CheckAppRegistrations {
                 $ReportingAppOwnersSP = foreach ($obj in $ReportingAppOwnersSP) {
                     [pscustomobject]@{
                         DisplayName     = $obj.DisplayNameLink
-                        Enabled         = $obj.Enabled
                         Foreign         = $obj.Foreign
                         PublisherName   = $obj.PublisherName
                         OwnersCount     = $obj.OwnersCount
@@ -864,7 +861,7 @@ function Invoke-CheckAppRegistrations {
                 [void]$DetailTxtBuilder.AppendLine("Admins (SPs)")
                 [void]$DetailTxtBuilder.AppendLine("================================================================================================")
                 [void]$DetailTxtBuilder.AppendLine(($ScopedAdminSP | format-table -Property Role,Scope,AssignmentType,DisplayName,PublisherName,Foreign,Owners | Out-String))
-                $ReportingAppOwnersSP = foreach ($obj in $ReportingAppOwnersSP) {
+                $ScopedAdminSP = foreach ($obj in $ScopedAdminSP) {
                     [pscustomobject]@{
                         Role            = $obj.Role
                         Scope           = $obj.Scope
@@ -972,7 +969,7 @@ Appendix: Experimental App Authentication Settings
 "
 
     # Set generic information which get injected into the HTML
-    Set-GlobalReportManifest -CurrentReportKey 'MI' -CurrentReportName 'ManagedIdentities Enumeration' -Warnings $ScriptWarningList
+    Set-GlobalReportManifest -CurrentReportKey 'AR' -CurrentReportName 'ManagedIdentities Enumeration' -Warnings $ScriptWarningList
 
     # HTML header below the navbar
 $headerHtml = @"

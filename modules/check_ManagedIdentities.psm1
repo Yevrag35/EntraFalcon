@@ -9,7 +9,6 @@ function Invoke-CheckManagedIdentities {
     [CmdletBinding()]
     Param (
         [Parameter(Mandatory=$false)][string]$OutputFolder = ".",
-        [Parameter(Mandatory=$false)][switch]$includeMS = $false,
         [Parameter(Mandatory=$true)][hashtable]$AllGroupsDetails,
         [Parameter(Mandatory=$true)][Object[]]$CurrentTenant,
         [Parameter(Mandatory=$false)][hashtable]$AzureIAMAssignments,
@@ -637,7 +636,6 @@ function Invoke-CheckManagedIdentities {
             AzureRoles = $AzureRoleCount
             AzureRoleDetails = $AzureRoleDetails
             OwnerSPDetails = $OwnerSPDetails
-            AppRegObjectId = $AppRegObjectId
             AppCredentials = $AppCredentialsCount
             AppCredentialsDetails = $AppCredentials
             AppApiPermission = $AppApiPermission
