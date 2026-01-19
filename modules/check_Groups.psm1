@@ -2110,7 +2110,7 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
                 $DeviceDetails = $Devices[$object.id]
 
                 # Calc Max Length
-                $DiplayName = $userDetails.userPrincipalName
+                $DiplayName = $DeviceDetails.displayName
                 if ($null -ne $DisplayName -and $DisplayName.Length -gt $DiplayNameLength) {
                     $DiplayNameLength = $DisplayName.Length
                 }
@@ -2131,7 +2131,7 @@ $tableOutput | Format-table DisplayName,type,SecurityEnabled,RoleAssignable,OnPr
             # Build TXT
             $formattedText = Format-ReportSection -Title "Nested Members: Devices" `
             -Objects $NestedDevicesRaw `
-            -Properties @("Displayname", "Enabled", "Type", "OS") `
+            -Properties @("Displayname", "Type", "OS") `
             -ColumnWidths @{ Displayname = [Math]::Min($DiplayNameLength, 30); Enabled = 8; Type = 15; OS = [Math]::Min($OsLength, 40) }
             [void]$DetailTxtBuilder.AppendLine($formattedText)
             
