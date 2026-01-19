@@ -99,7 +99,11 @@ function Invoke-CheckManagedIdentities {
 
     # Check if Azure IAM role were checked
     if (-not ($GLOBALAzurePsChecks)) {
-        $ManagedIdentitiesScriptWarningList += "Azure IAM assignments were not assessed"
+        if ($GLOBALAzureIamWarningText) {
+            $ManagedIdentitiesScriptWarningList += $GLOBALAzureIamWarningText
+        } else {
+            $ManagedIdentitiesScriptWarningList += "Coverage gap: Azure IAM role assignments were not assessed; Azure role assignments to MI are therefore missing from this report."
+        }
     }
 
     if ($ManagedIdentitiesCount -ge 1) {

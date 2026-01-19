@@ -296,6 +296,14 @@ $TenantReports = [pscustomobject]@{
 }
 
 $ReportsBasedOnObjects = Get-TenantReportAvailability -IncludeMsApps:$IncludeMsApps
+$global:GLOBALAzureIamWarningText = $null
+if (-not $GLOBALAzurePsChecks) {
+    if ($ReportsBasedOnObjects.ManagedIdenties) {
+        $global:GLOBALAzureIamWarningText = "Coverage gap: Azure IAM not assessed (no subscription visible or accessible, but managed identities exist). Azure role assignments are therefore missing from this report."
+    } else {
+        $global:GLOBALAzureIamWarningText = "Coverage gap: Azure IAM not assessed (no subscriptions exist or no access). Azure role assignments are therefore missing from this report."
+    }
+}
 $TenantReports.ConditionalAccessPolicies = ($null -ne $Caps -and $Caps.Count -gt 0)
 $TenantReports.PimForEntra               = ($null -ne $TenantPimRoleAssignments -and $TenantPimRoleAssignments.Count -gt 0)
 $TenantReports.AzureRoles                = ($null -ne $AzureIAMAssignments -and $AzureIAMAssignments.Count -gt 0)
@@ -345,7 +353,6 @@ if ($GLOBALPIMForEntraRolesChecked) {
 
 write-host "`n********************************** [9/9] Generating Summary Report **********************************"
 # Show assessment summary and generate summary HTML report
-Set-GlobalReportManifest -CurrentReportKey 'Summary' -CurrentReportName 'EntraFalcon Enumeration Summary'
 Export-Summary -CurrentTenant $CurrentTenant -StartTimestamp $StartTimestamp -OutputFolder $OutputFolder
 
 # Remove global variables

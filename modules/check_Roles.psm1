@@ -284,7 +284,7 @@ function Invoke-CheckRoles {
     #Define basic variables
     $Title = "Role_Assignments"
     $WarningReport = @()
-    if (-not $GLOBALGraphExtendedChecks) {$WarningReport += "Only active role assignments assessed!"}
+    if (-not $GLOBALGraphExtendedChecks) {$WarningReport += "Coverage gap: eligible role assignments not assessed; only active assignments are included."}
 
     ########################################## SECTION: DATACOLLECTION ##########################################
 

@@ -4057,7 +4057,7 @@ function Get-ConditionalAccessPolicies {
         $global:GLOBALPermissionForCaps = $true
     } else {
         Write-Host "[!] No Conditional Access Policies found."
-        $GroupScriptWarningList += "Group CAPs assignments were not assessed"
+        $GroupScriptWarningList += "Coverage gap: Conditional Access group assignments not assessed; CAP links may be missing."
         $global:GLOBALPermissionForCaps = $false
     }
     Return $CapGroups
@@ -5250,6 +5250,7 @@ function start-CleanUp {
     remove-variable -Scope Global GLOBALPermissionForCaps -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALPimForGroupsChecked -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzurePsChecks -ErrorAction SilentlyContinue
+    remove-variable -Scope Global GLOBALAzureIamWarningText -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAuthParameters -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALEntraRoleRating -ErrorAction SilentlyContinue
     remove-variable -Scope Global GLOBALAzureRoleRating -ErrorAction SilentlyContinue

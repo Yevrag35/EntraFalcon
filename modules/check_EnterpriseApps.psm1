@@ -118,7 +118,11 @@ function Invoke-CheckEnterpriseApps {
 
     # Check if Azure IAM role were checked
     if (-not ($GLOBALAzurePsChecks)) {
-        $EnterpriseAppsScriptWarningList += "Azure IAM assignments were not assessed"
+        if ($GLOBALAzureIamWarningText) {
+            $EnterpriseAppsScriptWarningList += $GLOBALAzureIamWarningText
+        } else {
+            $EnterpriseAppsScriptWarningList += "Coverage gap: Azure IAM role assignments were not assessed; Azure role assignments to EnterpriseApps are therefore missing from this report."
+        }
     }
 
     # Get all App API Permissions (needed to resolve the ID to a human readable name)

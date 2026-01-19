@@ -209,7 +209,7 @@ function Invoke-CheckGroups {
     $AllObjectDetailsHTML = [System.Collections.ArrayList]::new()
     $EscapedTenantName = [System.Uri]::EscapeDataString($CurrentTenant.DisplayName)
 
-    if (-not $GLOBALGraphExtendedChecks) {$GroupScriptWarningList.Add("Only active role assignments assessed!")}
+    if (-not $GLOBALGraphExtendedChecks) {$GroupScriptWarningList.Add("Coverage gap: eligible role assignments not assessed; only active assignments are included.")}
 
     $GroupImpactScore = @{
         "M365Group"                 = 1
@@ -415,17 +415,21 @@ function Invoke-CheckGroups {
 
     # Check if Azure IAM roles were checked
     if (-not ($GLOBALAzurePsChecks)) {
-        $GroupScriptWarningList.Add("Group Azure IAM assignments were not assessed")
+        if ($GLOBALAzureIamWarningText) {
+            $GroupScriptWarningList.Add($GLOBALAzureIamWarningText)
+        } else {
+            $GroupScriptWarningList.Add("Coverage gap: Azure IAM role assignments were not assessed; Azure role assignments to groups are therefore missing from this report.")
+        }
     }
 
     #Check if CAP have been assessed
     if (-not ($GLOBALPermissionForCaps)) {
-        $GroupScriptWarningList.Add("Group CAPs assignments were not assessed")
+        $GroupScriptWarningList.Add("Coverage gap: Conditional Access group assignments not assessed; CAP relations may be missing.")
     }
 
     #Check if PIM for groups was checked
     if (-not ($GLOBALPimForGroupsChecked)) {
-        $GroupScriptWarningList.Add("Pim for Groups was not assessed!")
+        $GroupScriptWarningList.Add("Coverage gap: PIM for Groups not assessed; eligible group owners/members are therefore missing from this report.")
     }
 
     Write-Host "[*] Getting all group memberships"

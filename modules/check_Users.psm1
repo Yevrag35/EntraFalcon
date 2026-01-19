@@ -48,9 +48,15 @@ function Invoke-CheckUsers {
     $AllObjectDetailsHTML = [System.Collections.ArrayList]::new()
     $WarningReport = [System.Collections.Generic.List[string]]::new()
     $EscapedTenantName = [System.Uri]::EscapeDataString($CurrentTenant.DisplayName)
-    if (-not $GLOBALGraphExtendedChecks) {$WarningReport.Add("Only active role assignments assessed!")}
-    if (-not ($GLOBALPimForGroupsChecked)) {$WarningReport.Add("Pim for Groups was not assessed!")}
-    if (-not ($GLOBALAzurePsChecks)) {$WarningReport.Add("Users Azure IAM assignments were not assessed!")}
+    if (-not $GLOBALGraphExtendedChecks) {$WarningReport.Add("Coverage gap: eligible role assignments not assessed; only active assignments are included.")}
+    if (-not ($GLOBALPimForGroupsChecked)) {$WarningReport.Add("Coverage gap: PIM for Groups not assessed; eligible group owners/members may be missing.")}
+    if (-not ($GLOBALAzurePsChecks)) {
+        if ($GLOBALAzureIamWarningText) {
+            $WarningReport.Add($GLOBALAzureIamWarningText)
+        } else {
+            $WarningReport.Add("Coverage gap: Azure IAM role assignments were not assessed; Azure role assignments to users are therefore missing from this report.")
+        }
+    }
     $UserImpact = @{
     "Base"                      = 1
     "DirectAppRoleNormal"       = 10
