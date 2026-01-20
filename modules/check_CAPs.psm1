@@ -601,14 +601,35 @@ function ConvertTo-Yaml {
         ###################### Analyzing policies
 
         $ExcludedObjects = $policy.Conditions.Users.ExcludeUsers.count + $policy.Conditions.Users.ExcludeGroups.count + $policy.Conditions.Users.ExcludeRoles.count + $ExcludedExternalUsersCount
-        #Count the conditions. For certain policies like blocking the device code the value should be <= 1 otherwise the policy is weakened
-        $DeviceFilterCount = $policy.Conditions.Devices.DeviceFilter.rule.count
+        
+        #Count condition types for policy complexity checks
         $SignInRiskCount = $policy.Conditions.SignInRiskLevels.count
         $UserRiskCount = $policy.Conditions.UserRiskLevels.count
         $AuthFlowCount = $policy.Conditions.AuthenticationFlows.TransferMethods.count
-        $ConditionsCount = $DeviceFilterCount + $IncPlatformsCount + $ExcPlatforms + $SignInRiskCount + $UserRiskCount + $IncludedNwLocationsCount + $ExcludedNwLocationsCount + $ClientAppTypesCount + $AuthFlowCount
-        if ($ConditionsCount -gt 1) {
-            Write-Log -Level Debug -Message "ConditionsCount for '$($policy.DisplayName)': total=$ConditionsCount (DeviceFilter=$DeviceFilterCount, IncPlatforms=$IncPlatformsCount, ExcPlatforms=$ExcPlatforms, SignInRisk=$SignInRiskCount, UserRisk=$UserRiskCount, IncNw=$IncludedNwLocationsCount, ExcNw=$ExcludedNwLocationsCount, ClientApps=$ClientAppTypesCount, AuthFlows=$AuthFlowCount)"
+
+        $HasDeviceFilter = $false
+        if ($policy.Conditions.Devices -and $policy.Conditions.Devices.DeviceFilter) {
+            $rule = $policy.Conditions.Devices.DeviceFilter.Rule
+            $HasDeviceFilter = $null -ne $rule -and @($rule).Count -gt 0
+        }
+        $HasPlatforms = ($IncPlatformsCount -gt 0 -or $ExcPlatforms -gt 0)
+        $HasSignInRisk = ($SignInRiskCount -gt 0)
+        $HasUserRisk = ($UserRiskCount -gt 0)
+        $HasNetworkLocations = ($IncludedNwLocationsCount -gt 0 -or $ExcludedNwLocationsCount -gt 0)
+        $HasClientApps = ($ClientAppTypesCount -gt 0)
+        $HasAuthFlows = ($AuthFlowCount -gt 0)
+
+        $ConditionTypeCount = 0
+        if ($HasDeviceFilter) { $ConditionTypeCount++ }
+        if ($HasPlatforms) { $ConditionTypeCount++ }
+        if ($HasSignInRisk) { $ConditionTypeCount++ }
+        if ($HasUserRisk) { $ConditionTypeCount++ }
+        if ($HasNetworkLocations) { $ConditionTypeCount++ }
+        if ($HasClientApps) { $ConditionTypeCount++ }
+        if ($HasAuthFlows) { $ConditionTypeCount++ }
+
+        if ($ConditionTypeCount -gt 1) {
+            Write-Log -Level Debug -Message "Condition types for '$($policy.DisplayName)': total=$ConditionTypeCount (DeviceFilter=$HasDeviceFilter, Platforms=$HasPlatforms, SignInRisk=$HasSignInRisk, UserRisk=$HasUserRisk, NetworkLocations=$HasNetworkLocations, ClientApps=$HasClientApps, AuthFlows=$HasAuthFlows)"
         }
 
         #Check policy for DeviceCodeFlow
@@ -641,8 +662,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $DeviceCodeFlowWarnings++
             }
-            if ($ConditionsCount -gt 2) {
-                $ErrorMessages += "has multiple ($ConditionsCount) conditions"
+            if ($ConditionTypeCount -gt 1) {
+                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
                 $DeviceCodeFlowWarnings++
             }
             if ($DeviceCodeFlowWarnings -ge 1) {
@@ -685,8 +706,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $LegacyAuthWarnings++
             }
-            if ($ConditionsCount -gt 2) {
-                $ErrorMessages += "has multiple ($ConditionsCount) conditions"
+            if ($ConditionTypeCount -gt 1) {
+                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
                 $LegacyAuthWarnings++
             }
         
@@ -726,8 +747,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $SignInRiskWarnings++
             }
-            if ($ConditionsCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionsCount) conditions"
+            if ($ConditionTypeCount -gt 1) {
+                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
                 $SignInRiskWarnings++
             }
         
@@ -767,8 +788,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $UserRiskWarnings++
             }
-            if ($ConditionsCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionsCount) conditions"
+            if ($ConditionTypeCount -gt 1) {
+                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
                 $UserRiskWarnings++
             }
         
@@ -810,8 +831,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $CombinedRiskWarnings++
             }
-            if ($ConditionsCount -gt 2) {
-                $ErrorMessages += "has additional ($ConditionsCount) conditions"
+            if ($ConditionTypeCount -gt 2) {
+                $ErrorMessages += "has additional ($ConditionTypeCount) condition types"
                 $CombinedRiskWarnings++
             }
 
@@ -847,8 +868,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += $MissingRolesWarning
                 $RegisterSecInfosWarnings++          
             }
-            if ($ConditionsCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionsCount) conditions"
+            if ($ConditionTypeCount -gt 2) {
+                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
                 $RegisterSecInfosWarnings++
             }
         
@@ -884,8 +905,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += $MissingRolesWarning
                 $RegisterDevicesInfosWarnings++              
             }
-            if ($ConditionsCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionsCount) conditions"
+            if ($ConditionTypeCount -gt 1) {
+                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
                 $RegisterDevicesInfosWarnings++
             }
         
@@ -925,8 +946,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $UserMfaWarnings++
             }
-            if ($ConditionsCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionsCount) conditions"
+            if ($ConditionTypeCount -gt 1) {
+                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
                 $UserMfaWarnings++
             }
         
@@ -962,8 +983,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += $MissingRolesWarning
                 $AuthStrengthWarnings++              
             }
-            if ($ConditionsCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionsCount) conditions"
+            if ($ConditionTypeCount -gt 1) {
+                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
                 $AuthStrengthWarnings++
             }
         
