@@ -16,179 +16,179 @@ function Invoke-CheckCaps {
     )
 
 
-############################## Function section ########################
+    ############################## Function section ########################
 
-#Function to check if a string is a GUID
-function Test-IsGuid {
-    param (
-        [string]$Value
-    )
+    #Function to check if a string is a GUID
+    function Test-IsGuid {
+        param (
+            [string]$Value
+        )
 
-    try {
-        $null = [guid]$Value
-        return $true
-    } catch {
+        try {
+            $null = [guid]$Value
+            return $true
+        } catch {
+            return $false
+        }
+    }
+        
+    # Function to check if an object is empty, considering nested properties
+    function Is-Empty {
+        param ([Object]$Obj)
+
+        if ($null -eq $Obj -or $Obj -eq "") {
+            return $true
+        }
+
+        if ($Obj -is [System.Collections.IEnumerable] -and $Obj -isnot [string]) {
+            foreach ($item in $Obj) {
+                if (-not (Is-Empty $item)) {
+                    return $false
+                }
+            }
+            return $true
+        }
+
+        if ($Obj -is [PSCustomObject]) {
+            foreach ($property in $Obj.PSObject.Properties) {
+                if (-not (Is-Empty $property.Value)) {
+                    return $false
+                }
+            }
+            return $true
+        }
+
         return $false
     }
-}
-    
-# Function to check if an object is empty, considering nested properties
-function Is-Empty {
-    param ([Object]$Obj)
 
-    if ($null -eq $Obj -or $Obj -eq "") {
-        return $true
-    }
+    # Function to look up GUIDs in hashtables
+    function Resolve-Name {
+        param (
+            [string]$Guid,
+            [string]$Report
+        )
 
-    if ($Obj -is [System.Collections.IEnumerable] -and $Obj -isnot [string]) {
-        foreach ($item in $Obj) {
-            if (-not (Is-Empty $item)) {
-                return $false
+        #Note: Not ideal checking each object type. However, relatively cheap with HashTables
+        if ($Users.ContainsKey($Guid)) {
+            $ResolvedGUID = $($Users[$Guid].UPN)
+
+            if ($Report -eq "HTML") {
+                $ResolvedGUIDLink = "<a href=Users_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$Guid>$ResolvedGUID</a>"
+                return $ResolvedGUIDLink
+            } elseif ($Report -eq "TXT") {
+                return $ResolvedGUID
+            }
+            
+        }
+        if ($AllGroupsDetails.ContainsKey($Guid)) {
+            $ResolvedGUID = $($AllGroupsDetails[$Guid].DisplayName)
+
+            if ($Report -eq "HTML") {
+                $ResolvedGUIDLink = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$Guid>$ResolvedGUID</a>"
+                return $ResolvedGUIDLink
+            } elseif ($Report -eq "TXT") {
+                return $ResolvedGUID
             }
         }
-        return $true
-    }
 
-    if ($Obj -is [PSCustomObject]) {
-        foreach ($property in $Obj.PSObject.Properties) {
-            if (-not (Is-Empty $property.Value)) {
-                return $false
-            }
-        }
-        return $true
-    }
-
-    return $false
-}
-
-# Function to look up GUIDs in hashtables
-function Resolve-Name {
-    param (
-        [string]$Guid,
-        [string]$Report
-    )
-
-    #Note: Not ideal checking each object type. However, relatively cheap with HashTables
-    if ($Users.ContainsKey($Guid)) {
-        $ResolvedGUID = $($Users[$Guid].UPN)
-
-        if ($Report -eq "HTML") {
-            $ResolvedGUIDLink = "<a href=Users_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$Guid>$ResolvedGUID</a>"
-            return $ResolvedGUIDLink
-        } elseif ($Report -eq "TXT") {
+        if ($EnterpriseAppsHT.ContainsKey($Guid)) { 
+            $ResolvedGUID = $($EnterpriseAppsHT[$Guid])
             return $ResolvedGUID
         }
         
-    }
-    if ($AllGroupsDetails.ContainsKey($Guid)) {
-        $ResolvedGUID = $($AllGroupsDetails[$Guid].DisplayName)
+        if ($NamedLocationsHT.ContainsKey($Guid)) { 
+            $ResolvedGUID = $($NamedLocationsHT[$Guid].Name)
 
-        if ($Report -eq "HTML") {
-            $ResolvedGUIDLink = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$Guid>$ResolvedGUID</a>"
-            return $ResolvedGUIDLink
-        } elseif ($Report -eq "TXT") {
+            if ($Report -eq "HTML") {
+                $ResolvedGUIDLink = "<a href=#appendix:-network-location>$ResolvedGUID</a>"
+                return $ResolvedGUIDLink
+            } elseif ($Report -eq "TXT") {
+                return $ResolvedGUID
+            }
+        }
+        if ($RoleTemplatesHT.ContainsKey($Guid)) { 
+            $ResolvedGUID = $($RoleTemplatesHT[$Guid])
             return $ResolvedGUID
         }
+        return $Guid  # Return original if not found
     }
 
-    if ($EnterpriseAppsHT.ContainsKey($Guid)) { 
-        $ResolvedGUID = $($EnterpriseAppsHT[$Guid])
-        return $ResolvedGUID
-    }
-    
-    if ($NamedLocationsHT.ContainsKey($Guid)) { 
-        $ResolvedGUID = $($NamedLocationsHT[$Guid].Name)
+    # Function to convert object to YAML and replacing GUIDs with names
+    function ConvertTo-Yaml {
+        param(
+            [Parameter(Mandatory=$true)]
+            [Object]$InputObject,
+            [string]$Indent = "",
+            [string]$Report
+        )
 
-        if ($Report -eq "HTML") {
-            $ResolvedGUIDLink = "<a href=#appendix:-network-location>$ResolvedGUID</a>"
-            return $ResolvedGUIDLink
-        } elseif ($Report -eq "TXT") {
-            return $ResolvedGUID
-        }
-    }
-    if ($RoleTemplatesHT.ContainsKey($Guid)) { 
-        $ResolvedGUID = $($RoleTemplatesHT[$Guid])
-        return $ResolvedGUID
-    }
-    return $Guid  # Return original if not found
-}
+        foreach ($property in $InputObject.PSObject.Properties) {
+            $name = $property.Name
+            $value = $property.Value
+            $newIndent = "$Indent  "
 
-# Function to convert object to YAML and replacing GUIDs with names
-function ConvertTo-Yaml {
-    param(
-        [Parameter(Mandatory=$true)]
-        [Object]$InputObject,
-        [string]$Indent = "",
-        [string]$Report
-    )
+            # Skip empty properties
+            if (Is-Empty $value) { continue }
 
-    foreach ($property in $InputObject.PSObject.Properties) {
-        $name = $property.Name
-        $value = $property.Value
-        $newIndent = "$Indent  "
-
-        # Skip empty properties
-        if (Is-Empty $value) { continue }
-
-        if ($value -is [System.Collections.IEnumerable] -and $value -isnot [string]) {
-            $isNestedObject = $false
-            foreach ($item in $value) {
-                if ($item -is [PSCustomObject]) {
-                    $isNestedObject = $true
-                    break
-                }
-            }
-
-            if ($isNestedObject) {
-                Write-Output "${Indent}${name}:"
+            if ($value -is [System.Collections.IEnumerable] -and $value -isnot [string]) {
+                $isNestedObject = $false
                 foreach ($item in $value) {
-                    if (-not (Is-Empty $item)) {
-                        Write-Output "${newIndent}-"
-                        ConvertTo-Yaml -InputObject $item -Indent "$newIndent  " -Report $Report
+                    if ($item -is [PSCustomObject]) {
+                        $isNestedObject = $true
+                        break
                     }
                 }
-            } else {
-                Write-Output "${Indent}${name}:"
-                foreach ($item in $value) {
-                    # Call function only if $item is a valid GUID
-                    if (Test-IsGuid -Value $item) {
-                        #Resolve the GUID
-                        $item = Resolve-Name -Guid $item -Report $Report
+
+                if ($isNestedObject) {
+                    Write-Output "${Indent}${name}:"
+                    foreach ($item in $value) {
+                        if (-not (Is-Empty $item)) {
+                            Write-Output "${newIndent}-"
+                            ConvertTo-Yaml -InputObject $item -Indent "$newIndent  " -Report $Report
+                        }
                     }
-                    Write-Output "${newIndent}- $item"
-                }
+                } else {
+                    Write-Output "${Indent}${name}:"
+                    foreach ($item in $value) {
+                        # Call function only if $item is a valid GUID
+                        if (Test-IsGuid -Value $item) {
+                            #Resolve the GUID
+                            $item = Resolve-Name -Guid $item -Report $Report
+                        }
+                        Write-Output "${newIndent}- $item"
+                    }
 
-            }
-        }
-        elseif ($value -is [PSCustomObject]) {
-            Write-Output "${Indent}${name}:"
-            ConvertTo-Yaml -InputObject $value -Indent $newIndent -Report $Report
-        }
-        else {
-            # Resolve GUID if applicable
-            if ($value -is [string]) {
-
-                # Call function only if $item is a valid GUID
-                if (Test-IsGuid -Value $value) {
-                    #Resolve the GUID
-                    $value = Resolve-Name -Guid $value -Report $Report
                 }
-                  $formattedValue = "'$value'"
             }
-            elseif ($value -is [datetime]) {
-                $formattedValue = "'$($value.ToString("yyyy-MM-dd HH:mm:ss"))'"
-            }
-            elseif ($value -is [boolean]) {
-                $formattedValue = $value.ToString().ToLower()
+            elseif ($value -is [PSCustomObject]) {
+                Write-Output "${Indent}${name}:"
+                ConvertTo-Yaml -InputObject $value -Indent $newIndent -Report $Report
             }
             else {
-                $formattedValue = $value
-            }
+                # Resolve GUID if applicable
+                if ($value -is [string]) {
 
-            Write-Output "${Indent}${name}: $formattedValue"
+                    # Call function only if $item is a valid GUID
+                    if (Test-IsGuid -Value $value) {
+                        #Resolve the GUID
+                        $value = Resolve-Name -Guid $value -Report $Report
+                    }
+                    $formattedValue = "'$value'"
+                }
+                elseif ($value -is [datetime]) {
+                    $formattedValue = "'$($value.ToString("yyyy-MM-dd HH:mm:ss"))'"
+                }
+                elseif ($value -is [boolean]) {
+                    $formattedValue = $value.ToString().ToLower()
+                }
+                else {
+                    $formattedValue = $value
+                }
+
+                Write-Output "${Indent}${name}: $formattedValue"
+            }
         }
     }
-}
 
 
 
@@ -662,12 +662,13 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $DeviceCodeFlowWarnings++
             }
-            if ($ConditionTypeCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
+            $additionalConditionTypes = $ConditionTypeCount - 1 # DeviceCode Flow is a condition by itself
+            if ($additionalConditionTypes -gt 0) {
+                $ErrorMessages += "has ($additionalConditionTypes) additional condition types"
                 $DeviceCodeFlowWarnings++
             }
             if ($DeviceCodeFlowWarnings -ge 1) {
-                $warningMessage = "Targeting DeviceCodeFlow but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Targeting Device Code flow but " + ($ErrorMessages -join ", ")
                 if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
                     $WarningPolicy = $warningMessage
                 } else {
@@ -706,8 +707,9 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $LegacyAuthWarnings++
             }
-            if ($ConditionTypeCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
+            $additionalConditionTypes = $ConditionTypeCount - 1 # ClientAppTypes are a condition by themself
+            if ($additionalConditionTypes -gt 0) {
+                $ErrorMessages += "has ($additionalConditionTypes) additional condition types"
                 $LegacyAuthWarnings++
             }
         
@@ -747,13 +749,14 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $SignInRiskWarnings++
             }
-            if ($ConditionTypeCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
+            $additionalConditionTypes = $ConditionTypeCount - 1 # SignInRiskLevels is condition by itself
+            if ($additionalConditionTypes -gt 0) {
+                $ErrorMessages += "has additional ($additionalConditionTypes) condition types"
                 $SignInRiskWarnings++
             }
         
             if ($SignInRiskWarnings -ge 1) {
-                $warningMessage = "Targeting risky sign-in but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Targeting risky sign-ins but " + ($ErrorMessages -join ", ")
                 if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
                     $WarningPolicy = $warningMessage
                 } else {
@@ -788,8 +791,9 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $UserRiskWarnings++
             }
-            if ($ConditionTypeCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
+            $additionalConditionTypes = $ConditionTypeCount - 1 # UserRiskLevels is condition by itself
+            if ($additionalConditionTypes -gt 0) {
+                $ErrorMessages += "has additional ($additionalConditionTypes) condition types"
                 $UserRiskWarnings++
             }
         
@@ -831,8 +835,9 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $CombinedRiskWarnings++
             }
-            if ($ConditionTypeCount -gt 2) {
-                $ErrorMessages += "has additional ($ConditionTypeCount) condition types"
+            $additionalConditionTypes = $ConditionTypeCount - 2 # UserRiskLevels and SignInRiskLevels are conditions by themself
+            if ($additionalConditionTypes -gt 0) {
+                $ErrorMessages += "has additional ($additionalConditionTypes) condition types"
                 $CombinedRiskWarnings++
             }
 
@@ -946,8 +951,8 @@ function ConvertTo-Yaml {
                 $ErrorMessages += "has $ExcludedObjects excluded objects"
                 $UserMfaWarnings++
             }
-            if ($ConditionTypeCount -gt 1) {
-                $ErrorMessages += "has multiple ($ConditionTypeCount) condition types"
+            if ($ConditionTypeCount -gt 0) {
+                $ErrorMessages += "has ($ConditionTypeCount) condition types"
                 $UserMfaWarnings++
             }
         
@@ -962,7 +967,7 @@ function ConvertTo-Yaml {
         }
 
         #Check policy with Authentication strengths for enforcing phishing-resistant MFA
-        if ($policy.Conditions.Applications.IncludeAuthenticationContextClassReferences.count -eq 0 -and $policy.GrantControls.AuthenticationStrength.id.count -ge 1) {
+        if ($policy.Conditions.Applications.IncludeAuthenticationContextClassReferences.count -eq 0 -and $policy.GrantControls.AuthenticationStrength.id.count -ge 1 -and $policy.Conditions.SignInRiskLevels.count -eq 0 -and $policy.Conditions.UserRiskLevels.count -eq 0) {
             $PolicyAuthStrength = $true
             $AuthStrengthWarnings = 0
             $ErrorMessages = @()
@@ -989,7 +994,7 @@ function ConvertTo-Yaml {
             }
         
             if ($AuthStrengthWarnings -ge 1) {
-                $warningMessage = "Requires AuthStrength (no AuthContext) but " + ($ErrorMessages -join ", ")
+                $warningMessage = "Requires Authentication Strength (no Auth Context) but " + ($ErrorMessages -join ", ")
                 if ([string]::IsNullOrWhiteSpace($WarningPolicy)) {
                     $WarningPolicy = $warningMessage
                 } else {
@@ -1068,39 +1073,39 @@ function ConvertTo-Yaml {
     write-host "[*] Processing results"
     Write-Log -Level Debug -Message "Processed $($ConditionalAccessPolicies.Count) conditional access policies"
 
-# Initialize an empty array to store warning messages
-$Warnings = @()
-$MissingPoliciesHTML = ""
+    # Initialize an empty array to store warning messages
+    $Warnings = @()
+    $MissingPoliciesHTML = ""
 
     # Check each policy variable and add corresponding warning messages
     if (!$PolicyDeviceCodeFlow) {
-        $Warnings += "No policy targeting the Device Code flow found!"
+        $Warnings += "No policy targeting the Device Code flow was found!"
     }
     if (!$PolicyLegacyAuth) {
-        $Warnings += "No policy targeting legacy authentication found!"
+        $Warnings += "No policy targeting legacy authentication was found!"
     }
     if (!$PolicyRiskySignIn) {
-        $Warnings += "No policy targeting risky sign-ins found!"
+        $Warnings += "No policy targeting risky sign-ins was found!"
     }
     if (!$PolicyUserRisk) {
-        $Warnings += "No policy targeting user risk found!"
+        $Warnings += "No policy targeting user risk was found!"
     }
     if (!$PolicyRegSecInfo) {
-        $Warnings += "No policy limiting the registrations of security information found!"
+        $Warnings += "No policy limiting the registrations of security information was found!"
     }
     if (!$PolicyRegDevices) {
-        $Warnings += "No policy limiting joining or registering devices found!"
+        $Warnings += "No policy Targeting joining or registering devices was found!"
     }
     if (!$PolicyMfaUser) {
-        $Warnings += "No policy enforcing MFA found!"
+        $Warnings += "No policy enforcing MFA was found!"
     }
     if (!$PolicyAuthStrength) {
-        $Warnings += "No policy enforcing Authentication Strength (e.g., phishing-resistant MFA) for admins found!"
+        $Warnings += "No policy enforcing Authentication Strength (e.g., phishing-resistant MFA) for admins was found!"
     }
     
     if ($Warnings.count -ge 1) {
-    # Correct way to format warnings into HTML list items
-    $MissingPolicies = ($Warnings | ForEach-Object { "<li>$_</li>" }) -join "`n"
+        # Correct way to format warnings into HTML list items
+        $MissingPolicies = ($Warnings | ForEach-Object { "<li>$_</li>" }) -join "`n"
 
 # Generate final HTML output
 $MissingPoliciesHTML = @"
@@ -1110,9 +1115,9 @@ $MissingPolicies
 </ul>
 "@
 
-    Write-Log -Level Debug -Message "Missing policy warnings: $($Warnings.Count)"
-    Write-Log -Level Trace -Message ("Missing policies: " + ($Warnings -join " | "))
-}
+        Write-Log -Level Debug -Message "Missing policy warnings: $($Warnings.Count)"
+        Write-Log -Level Trace -Message ("Missing policies: " + ($Warnings -join " | "))
+    }
 
     #Define stringbuilder to avoid performance impact
     $DetailTxtBuilder = [System.Text.StringBuilder]::new()
