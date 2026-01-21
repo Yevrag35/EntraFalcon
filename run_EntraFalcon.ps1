@@ -129,7 +129,7 @@ if ($BroCi -and $AuthMethod -eq "DeviceCode") {
 }
 
 #Constants
-$EntraFalconVersion = "V20260117"
+$EntraFalconVersion = "V20260121"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
@@ -294,7 +294,6 @@ $TenantReports = [pscustomobject]@{
     PimForEntra               = $false
     Summary                   = $true
 }
-
 $ReportsBasedOnObjects = Get-TenantReportAvailability -IncludeMsApps:$IncludeMsApps
 $global:GLOBALAzureIamWarningText = $null
 if (-not $GLOBALAzurePsChecks) {
