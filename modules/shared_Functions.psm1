@@ -2069,8 +2069,48 @@ $global:GLOBALJavaScript_Nav = @'
 
                     // Paste your existing help HTML here unchanged:
                     modalContent.innerHTML = `
-                        <h2 style="margin-top: 0;">How to Use This Report</h2>
-                        ... keep the rest exactly as-is ...
+                    <h2 style="margin-top: 0;">How to Use This Report</h2>
+                    <strong>General</strong>
+                    <ul style="margin-top: 6px;">
+                        <li>Click the \u2699\uFE0F <strong>Columns</strong> button to show or hide specific columns.
+                        <li>Click \u{1F4BE} <strong>Export CSV</strong> to download the currently visible data as a CSV file.</li>
+                        <li>Click \u{1F441} <strong>Share View</strong> to copy filters, sorting, and column selection as a shareable link.</li>
+                        <li>Click \uD83E\uDDF0 <strong>Preset Views</strong> to apply preconfigured filters and column selections.</li>
+                        <li>Click \uD83D\uDD01 <strong>Reset View</strong> to reset the view to the default.</li>
+                        <li>Click on object names to jump to detailed information, even across reports.<br>
+                        Links look like this: <a href="#" onclick="return false;" style="pointer-events: none;">Example Link</a></li>
+                        <li>When navigating within the report, use the browser's back button to return.</li>
+                        <li>Browser search can locate content even within collapsed <em>details</em> sections.</li>
+                        <li>Some table header fields display helper text on mouse hover.</li>
+                        <li>Sort data by clicking any table header.
+                    </ul>
+                    <strong>Filtering</strong>
+                    <ul style="margin-top: 6px;">
+                        <li>If no operator is specified, filtering defaults to <em>contains</em>.</li>
+                        <li>Use <code>=</code> for an exact match.</li>
+                        <li>Use <code>^</code> for <em>starts with</em> (e.g., <code>^Mallory</code>).</li>
+                        <li>Use <code>$</code> for <em>ends with</em> (e.g., <code>$domain.ch</code>).</li>
+                        <li>Comparison operators like <code>&gt;</code>, <code>&lt;</code>, <code>&gt;=</code>, <code>&lt;=</code> are supported (for numeric values only).</li>
+                        <li>Filters can be negated by starting with <code>!</code> (except for numeric comparisons).<br>Examples: <code>!Mallory</code>, <code>!=Mallory</code>, <code>!^Mallory</code> or <code>!$domain.ch</code>.</li>
+                        <li>Use <code>=empty</code> to match empty cells, or <code>!=empty</code> to match non-empty cells.</li>
+                        <li>Use <code>||</code> to match any of multiple values in the same column (e.g., <code>Admin || Guest</code>).</li>
+                        <li>To apply <code>OR</code> logic across columns, use <code>or_</code> or <code>group1_</code>. Examples: Column1:<code>or_>1</code> Column2:<code>or_!Mallory</code>.</li>
+                        <li>The <strong>DisplayName</strong> column includes the object's ID (hidden), allowing filtering by ID.</li>
+                    </ul>
+                    <strong>Rating</strong>
+                    <ul style="margin-top: 6px;">
+                        <li><strong>Impact</strong>: Represents the amount or severity of permission the object has.</li>
+                        <li><strong>Likelihood</strong>: Represents how easily the object can be influenced or strongly it is protected.</li>
+                        <li><strong>Risk</strong>: Calculated as: <em>Impact x Likelihood = Risk</em>.</li>
+                        <li><strong>Important</strong>:
+                            <ul>
+                                <li>This scoring is meant as a basic evaluation to help sort and prioritize entries in the table.</li>
+                                <li>Risk scores are not directly comparable between object types or reports.</li>
+                                <li>It is not intended to replace a full risk assessment.</li>
+                            </ul>
+                        </li> 
+                    </ul>
+                    \u{1F4D6} More information in the <a href="https://github.com/CompassSecurity/EntraFalcon">GitHub README</a><br>
                         <button id="closeHelpModal" style="margin-top: 16px; padding: 6px 12px; font-size: 14px; border-radius: 4px; border: 1px solid #aaa; cursor: pointer;">\u2716 Close</button>
                     `;
 
