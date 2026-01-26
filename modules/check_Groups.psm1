@@ -616,6 +616,9 @@ function Invoke-CheckGroups {
         $GroupNestedIn = [System.Collections.Generic.List[psobject]]::new()
         $AppRoleAssignments = [System.Collections.Generic.List[object]]::new()
 		$AzureRoleDetails = @()
+        $RoleCount = 0
+        $RolePrivilegedCount = 0
+        $roleDetails = [System.Collections.Generic.List[object]]::new()
 
         # Check the token lifetime after a specific amount of objects
         if (($ProgressCounter % $TokenCheckLimit) -eq 0 -and $SkipAutoRefresh -eq $false) {
@@ -1028,6 +1031,7 @@ function Invoke-CheckGroups {
         #Process Entra Role assignments
         #Use function to get the impact score and warning message for assigned Entra roles
         if ($RoleCount -ge 1) {
+            Write-Log -Level Trace -Message "Processing group $($group.DisplayName) with $RoleCount role assignments"
             $EntraRolesProcessedDetails = Invoke-EntraRoleProcessing -RoleDetails $RoleDetails
             [void]$Warnings.Add($EntraRolesProcessedDetails.Warning)
             $ImpactScore += $EntraRolesProcessedDetails.ImpactScore
