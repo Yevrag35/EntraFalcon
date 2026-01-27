@@ -25,6 +25,65 @@
 #>
 
 
+function Resolve-ApiScopeUrl {
+    <#
+    .SYNOPSIS
+    Normalizes v2 scopes across simple scope names, GUIDs, full URIs, and URN APIs.
+
+    .DESCRIPTION
+    Expands scope tokens into a v2-compatible scope string by:
+    - Prefixing simple scopes with the target API resource.
+    - Preserving fully qualified scopes and common OIDC scopes.
+    - Treating GUID scope tokens as application IDs (api://{appId}/.default).
+    - Supporting URN-based APIs (e.g., urn:ms-drs:enterpriseregistration.windows.net).
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$Api,
+        [Parameter(Mandatory = $true)][string]$Scope
+    )
+
+    # Regular expression for a GUID
+    $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+    # Determine the base resource URI for simple scopes
+    if ($Api -match $guidPattern) {
+        # Some Microsoft first-party resources expect the bare GUID resource ID
+        $baseResource = $Api
+    } elseif ($Api.StartsWith("urn:", 'InvariantCultureIgnoreCase') -or $Api -match '://') {
+        $baseResource = $Api
+    } else {
+        $baseResource = "https://$Api"
+    }
+
+    $baseResource = $baseResource.TrimEnd('/')
+
+    # OIDC scopes should not be prefixed with the API resource
+    $oidcScopes = @('offline_access', 'openid', 'profile', 'email')
+
+    $scopeTokens = $Scope -split '\s+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    $resolvedTokens = foreach ($token in $scopeTokens) {
+        if ($token -match '://') {
+            # Fully qualified scope/resource
+            $token
+        } elseif ($token.StartsWith("urn:", 'InvariantCultureIgnoreCase')) {
+            # URN scope/resource
+            $token
+        } elseif ($oidcScopes -contains $token) {
+            # OIDC scope
+            $token
+        } elseif ($token -match $guidPattern) {
+            # GUID scope tokens typically refer to a resource/app ID
+            "$token/.default"
+        } else {
+            # Normalize default/.default and prefix with the base resource
+            $normalizedToken = if ($token -eq 'default' -or $token -eq '.default') { '.default' } else { $token }
+            "$baseResource/$normalizedToken"
+        }
+    }
+
+    return ($resolvedTokens -join ' ')
+}
+
 function Invoke-Auth {
     <#
     .SYNOPSIS
@@ -130,7 +189,7 @@ function Invoke-Auth {
         [Parameter(Mandatory=$false)][int]$Port = 13824,
         [Parameter(Mandatory=$false)][int]$HttpTimeout = 180,
         [Parameter(Mandatory=$false)][string]$ClientID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
-        [Parameter(Mandatory=$false)][string]$Scope = "default offline_access",
+        [Parameter(Mandatory=$false)][string]$Scope = ".default offline_access",
         [Parameter(Mandatory=$false)][string]$Api = "graph.microsoft.com",
         [Parameter(Mandatory=$false)][string]$Tenant = "organizations",
         [Parameter(Mandatory=$false)][string]$RedirectURL = "http://localhost:$($Port)",
@@ -169,16 +228,8 @@ function Invoke-Auth {
         }
     }
 
-    # Regular Expression for a GUID
-    $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-
-    # Construct Scope
-    if ($Api -match $guidPattern -or $Api.StartsWith("urn:", 'InvariantCultureIgnoreCase')) {
-        $ApiScopeUrl = "$Api/.$Scope"
-    }
-    else {
-        $ApiScopeUrl = "https://$Api/.$Scope"
-    }
+    # Construct scope string for v2 endpoints
+    $ApiScopeUrl = Resolve-ApiScopeUrl -Api $Api -Scope $Scope
 
 
     #Generate State
@@ -194,8 +245,17 @@ function Invoke-Auth {
 
     #Check if PKCE should not be used
     if (-not $DisablePKCE) {
+        # Generate a PKCE code verifier and derive an S256 code challenge
         $PKCE = -join ((48..57) + (65..90) + (97..122) + 45, 46, 95, 126 | Get-Random -Count (Get-Random -Minimum 43 -Maximum 129) | ForEach-Object {[char]$_})
-        $Url += "&code_challenge=$PKCE&code_challenge_method=plain"
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $verifierBytes = [System.Text.Encoding]::ASCII.GetBytes($PKCE)
+            $challengeBytes = $sha256.ComputeHash($verifierBytes)
+            $codeChallenge = [Convert]::ToBase64String($challengeBytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+        } finally {
+            $sha256.Dispose()
+        }
+        $Url += "&code_challenge=$codeChallenge&code_challenge_method=S256"
     }
 
     #Check if LoginHint should not be used
@@ -372,7 +432,7 @@ function Invoke-Auth {
                                 }
 
                                 #Call the token endpoint
-                                $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -Origin $Origin -UserAgent $UserAgent
+                                $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -Tenant $Tenant -PKCE $PKCE -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -Origin $Origin -UserAgent $UserAgent
                                 $Proceed = $false
 
                             } elseif ($Request.HttpMethod -eq 'GET' -and $($Request.QueryString) -match "\berror\b") {
@@ -534,7 +594,7 @@ function Invoke-Auth {
         if ($AuthorizationCode) {
             write-host "[+] Got an AuthCode"
             #Use function to call the Token endpoint
-            $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -Origin $Origin -UserAgent $UserAgent
+            $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -Tenant $Tenant -PKCE $PKCE -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -Origin $Origin -UserAgent $UserAgent
             return $tokens 
         }
     }
@@ -593,7 +653,7 @@ function Invoke-Auth {
         }
     
         #Call the token endpoint
-        $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -Origin $Origin -UserAgent $UserAgent
+        $tokens = Get-Token -ClientID $ClientID -ApiScopeUrl $ApiScopeUrl -RedirectURL $RedirectURL -Tenant $Tenant -PKCE $PKCE -DisablePKCE $DisablePKCE -DisableCAE $DisableCAE -TokenOut $TokenOut -DisableJwtParsing $DisableJwtParsing -AuthorizationCode $AuthorizationCode -ReportName $ReportName -Reporting $Reporting -Origin $Origin -UserAgent $UserAgent
         return $tokens
     }
 }
@@ -667,7 +727,7 @@ function Invoke-Refresh {
     param (
         [Parameter(Mandatory=$true)][string]$RefreshToken,
         [Parameter(Mandatory=$false)][string]$ClientID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
-        [Parameter(Mandatory=$false)][string]$Scope = "default offline_access",
+        [Parameter(Mandatory=$false)][string]$Scope = ".default offline_access",
         [Parameter(Mandatory=$false)][string]$Api = "graph.microsoft.com",
         [Parameter(Mandatory=$false)][string]$Tenant = "common",
         [Parameter(Mandatory=$false)][switch]$TokenOut,
@@ -693,16 +753,8 @@ function Invoke-Refresh {
         $Headers.Add("Origin", $Origin)
     }
 
-    # Regular Expression for a GUID
-    $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-
-    # Construct Scope
-    if ($Api -match $guidPattern -or $Api.StartsWith("urn:", 'InvariantCultureIgnoreCase')) {
-        $ApiScopeUrl = "$Api/.$Scope"
-    }
-    else {
-        $ApiScopeUrl = "https://$Api/.$Scope"
-    }
+    # Construct scope string for v2 endpoints
+    $ApiScopeUrl = Resolve-ApiScopeUrl -Api $Api -Scope $Scope
 
 
     #Define Body (Emulates Azure CLI)
@@ -765,9 +817,13 @@ function Invoke-Refresh {
         $Proceed = $false
     }
 
-    #Check if answer contains tokens
-    if ($tokens.access_token -and $tokens.refresh_token -and $Proceed) {
-        Write-Host "[+] Got an access token and a refresh token"
+    #Check if answer contains an access token (refresh token can be omitted)
+    if ($tokens.access_token -and $Proceed) {
+        if ($tokens.refresh_token) {
+            Write-Host "[+] Got an access token and a refresh token"
+        } else {
+            Write-Host "[+] Got an access token (no refresh token requested)"
+        }
         $tokens | Add-Member -NotePropertyName Expiration_time -NotePropertyValue (Get-Date).AddSeconds($tokens.expires_in)
     
 
@@ -835,6 +891,10 @@ function Invoke-DeviceCodeFlow {
         .PARAMETER Api
         Specifies the target API for the authentication request.
         Default: `graph.microsoft.com`
+
+        .PARAMETER Scope
+        Specifies the API permissions (scopes) to request during authentication. Multiple scopes should be space-separated.
+        Default: `default offline_access`
         
         .PARAMETER DisableJwtParsing
         Disables parsing of the JWT access token. When set, the token is returned as-is without any additional information.
@@ -878,6 +938,7 @@ function Invoke-DeviceCodeFlow {
     param (
         [Parameter(Mandatory=$false)][string]$ClientID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46",
         [Parameter(Mandatory=$false)][string]$Api = "graph.microsoft.com",
+        [Parameter(Mandatory=$false)][string]$Scope = ".default offline_access",
         [Parameter(Mandatory=$false)][switch]$TokenOut,
         [Parameter(Mandatory=$false)][switch]$DisableJwtParsing = $false,
         [Parameter(Mandatory=$false)][switch]$DisableBrowserStart = $false,
@@ -888,29 +949,23 @@ function Invoke-DeviceCodeFlow {
 
     $Proceed = $true
     
-    # Regular Expression for a GUID
-    $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-
-    # Construct Scope
-    if ($Api -match $guidPattern -or $Api.StartsWith("urn:", 'InvariantCultureIgnoreCase')) {
-        $ApiScopeUrl = "$Api/.$Scope"
-    }
-    else {
-        $ApiScopeUrl = "https://$Api/.$Scope"
-    }
+    # Construct scope string for v2 endpoints
+    $ApiScopeUrl = Resolve-ApiScopeUrl -Api $Api -Scope $Scope
     
 
     $Headers=@{}
     $Headers["User-Agent"] = $UserAgent
     $Body = @{
         client_id   = $ClientID
-        resource    = $Resource
+        scope       = $ApiScopeUrl
     }
-    write-host "[*] Starting Device Code Flow: API $Resource / Client id: $ClientID"
+    write-host "[*] Starting Device Code Flow: API: $Api / Client id: $ClientID"
+    #Check if CAE is wanted
+
 
     # Call the token endpoint to get the tokens
     Try {
-        $DeviceCodeDetails = Invoke-RestMethod "https://login.microsoftonline.com/$Tenant/oauth2/devicecode?api-version=1.0" -Method POST -Body $Body -Headers $Headers
+        $DeviceCodeDetails = Invoke-RestMethod "https://login.microsoftonline.com/$Tenant/oauth2/v2.0/devicecode" -Method POST -Body $Body -Headers $Headers
     } Catch {
         $InitialError = $_ | ConvertFrom-Json  
         Write-Host "[!] Aborting...."
@@ -919,7 +974,7 @@ function Invoke-DeviceCodeFlow {
         if ($Reporting) {
             $ErrorDetails = [PSCustomObject]@{
                 ClientID    = $ClientID
-                ErrorLong   = $PollingError.error_description
+                ErrorLong   = $InitialError.error_description
             }
             Invoke-Reporting -ErrorDetails $ErrorDetails -OutputFile "DeviceCode_errors.csv"
         }
@@ -933,12 +988,19 @@ function Invoke-DeviceCodeFlow {
         #Check if browser should be started automatically
         if (-not $DisableBrowserStart) {
             write-host "[*] Opening browser"
-            Start-Process $DeviceCodeDetails.verification_url
+            $VerificationUrl = $DeviceCodeDetails.verification_uri_complete
+            if (-not $VerificationUrl) {
+                $VerificationUrl = $DeviceCodeDetails.verification_uri
+            }
+            Start-Process $VerificationUrl
         } else {
             write-host "[i] Automatic Browser start disabled"
-            write-host "[i] Use the code at: $($DeviceCodeDetails.verification_url)"
+            if ($DeviceCodeDetails.verification_uri_complete) {
+                write-host "[i] Use the code at: $($DeviceCodeDetails.verification_uri_complete)"
+            } else {
+                write-host "[i] Use the code at: $($DeviceCodeDetails.verification_uri)"
+            }
         }
-
         $Body = @{
             client_id   = $ClientID
             grant_type  = "urn:ietf:params:oauth:grant-type:device_code"
@@ -951,7 +1013,7 @@ function Invoke-DeviceCodeFlow {
         while ($Counter -lt $MaxAttempts) {
             $Counter++
             Try {
-                $TokensDeviceCode = Invoke-RestMethod 'https://login.microsoftonline.com/Common/oauth2/token?api-version=1.0' -Method POST -Body $Body -Headers $Headers
+                $TokensDeviceCode = Invoke-RestMethod "https://login.microsoftonline.com/$Tenant/oauth2/v2.0/token" -Method POST -Body $Body -Headers $Headers
             } Catch {
                 $PollingError = $_ | ConvertFrom-Json
                 if ($PollingError.error -eq "authorization_pending") {
@@ -974,8 +1036,12 @@ function Invoke-DeviceCodeFlow {
                 }
                 Start-Sleep 3
             }
-            if ($TokensDeviceCode.access_token -and $TokensDeviceCode.refresh_token) {
-                Write-Host "[+] Got an access token and a refresh token"
+            if ($TokensDeviceCode.access_token) {
+                if ($TokensDeviceCode.refresh_token) {
+                    Write-Host "[+] Got an access token and a refresh token"
+                } else {
+                    Write-Host "[+] Got an access token (no refresh token requested)"
+                }
                 $TokensDeviceCode | Add-Member -NotePropertyName Expiration_time -NotePropertyValue (Get-Date).AddSeconds($TokensDeviceCode.expires_in)
 
                 if (-not $DisableJwtParsing) {
@@ -1090,7 +1156,7 @@ function Invoke-ClientCredential {
         [Parameter(Mandatory=$true)][string]$ClientId,
         [Parameter(Mandatory=$false)][string]$ClientSecret,
         [Parameter(Mandatory=$false)][string]$Api = "graph.microsoft.com",
-        [Parameter(Mandatory=$false)][string]$Scope = "default",
+        [Parameter(Mandatory=$false)][string]$Scope = ".default",
         [Parameter(Mandatory=$false)][switch]$TokenOut,
         [Parameter(Mandatory=$false)][switch]$DisableJwtParsing = $false,
         [Parameter(Mandatory=$false)][string]$UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
@@ -1115,16 +1181,8 @@ function Invoke-ClientCredential {
         )
     }
 
-    # Regular Expression for a GUID
-    $guidPattern = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-
-    # Construct Scope
-    if ($Api -match $guidPattern -or $Api.StartsWith("urn:", 'InvariantCultureIgnoreCase')) {
-        $ApiScopeUrl = "$Api/.$Scope"
-    }
-    else {
-        $ApiScopeUrl = "https://$Api/.$Scope"
-    }
+    # Construct scope string for v2 endpoints
+    $ApiScopeUrl = Resolve-ApiScopeUrl -Api $Api -Scope $Scope
         
      # Get Access Token 
     $tokenUrl = "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" 
@@ -1450,6 +1508,8 @@ function Get-Token {
         [Parameter(Mandatory=$true)][string]$ApiScopeUrl,
         [Parameter(Mandatory=$true)][string]$RedirectURL,
         [Parameter(Mandatory=$true)][string]$AuthorizationCode,
+        [Parameter(Mandatory=$false)][string]$Tenant = "organizations",
+        [Parameter(Mandatory=$false)][string]$PKCE,
         [Parameter(Mandatory=$false)][bool]$DisablePKCE,
         [Parameter(Mandatory=$false)][bool]$DisableCAE,
         [Parameter(Mandatory=$false)][bool]$Reporting,
@@ -1487,7 +1547,12 @@ function Get-Token {
 
     #Add PKCE if not disabled
     if (-not $DisablePKCE) {
-        $Body.Add("code_verifier", $PKCE)
+        if ($PKCE) {
+            $Body.Add("code_verifier", $PKCE)
+        } else {
+            Write-Host "[!] PKCE is enabled but no code verifier was provided. Aborting..."
+            return
+        }
     }
 
     #Check if CAE is deactivated
@@ -1497,7 +1562,7 @@ function Get-Token {
 
     Try {
         # Call the token endpoint to get the tokens
-        $tokens = Invoke-RestMethod 'https://login.microsoftonline.com/organizations/oauth2/v2.0/token' -Method POST -Body $Body -Headers $Headers
+        $tokens = Invoke-RestMethod "https://login.microsoftonline.com/$Tenant/oauth2/v2.0/token" -Method POST -Body $Body -Headers $Headers
     } Catch {
         #Error Handling for initial request
         $TokenRequestError = $_ | ConvertFrom-Json
@@ -1535,9 +1600,13 @@ function Get-Token {
         
     }
 
-    #Check if answer contains tokens
-    if ($tokens.access_token -and $tokens.refresh_token) {
-        Write-Host "[+] Got an access token and a refresh token"
+    #Check if answer contains an access token (refresh token can be omitted)
+    if ($tokens.access_token) {
+        if ($tokens.refresh_token) {
+            Write-Host "[+] Got an access token and a refresh token"
+        } else {
+            Write-Host "[+] Got an access token (no refresh token requested)"
+        }
 
         $tokens | Add-Member -NotePropertyName Expiration_time -NotePropertyValue (Get-Date).AddSeconds($tokens.expires_in)
 
@@ -1633,7 +1702,7 @@ function Show-EntraTokenAidHelp {
 
     # Header
     Write-Host $banner -ForegroundColor Cyan
-    Write-Host "v20251214" -ForegroundColor Green
+    Write-Host "v20260127" -ForegroundColor Green
     Write-Host "Project Source: https://github.com/zh54321/EntraTokenAid" -ForegroundColor DarkCyan
     Write-Host ""
 
@@ -1683,5 +1752,3 @@ function Show-EntraTokenAidHelp {
 
 
 Export-ModuleMember -Function Invoke-Auth,Invoke-Refresh,Invoke-DeviceCodeFlow,Invoke-ParseJwt,Show-EntraTokenAidHelp,Invoke-ClientCredential
-
-
