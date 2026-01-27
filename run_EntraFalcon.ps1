@@ -129,7 +129,7 @@ if ($BroCi -and $AuthMethod -eq "DeviceCode") {
 }
 
 #Constants
-$EntraFalconVersion = "V20260125"
+$EntraFalconVersion = "V20260127"
 
 # Import shared functions
 $ScriptRoot = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
