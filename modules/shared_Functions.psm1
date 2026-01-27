@@ -5089,10 +5089,24 @@ function invoke-EntraFalconAuth {
                 }
 
                 PimforEntra = @{
-                    Any = {
-                        $tokens = Invoke-Refresh -RefreshToken $GLOBALMsGraphAccessToken.refresh_token `
-                                                -ClientId "eb20f3e3-3dce-4d2c-b721-ebb8d4414067" `
-                                                -DisableJwtParsing @GLOBALAuthParameters
+                    AuthCode = {
+                        $tokens = Invoke-Auth -ClientID '51f81489-12ee-4a9e-aaae-a2591f45987d' `
+                                             -RedirectUrl 'http://localhost:13824/' `
+                                             -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPIMsGraphAccessToken = $tokens
+                        $true
+                    }
+                    DeviceCode = {
+                        $tokens = Invoke-DeviceCodeFlow -ClientID '51f81489-12ee-4a9e-aaae-a2591f45987d' `
+                                                       -DisableJwtParsing @GLOBALAuthParameters
+                        $global:GLOBALPIMsGraphAccessToken = $tokens
+                        $true
+                    }
+                    ManualCode = {
+                        $tokens = Invoke-Auth -ManualCode `
+                                             -ClientID '51f81489-12ee-4a9e-aaae-a2591f45987d' `
+                                             -RedirectUrl 'http://localhost:13824/' `
+                                             -DisableJwtParsing @GLOBALAuthParameters
                         $global:GLOBALPIMsGraphAccessToken = $tokens
                         $true
                     }
@@ -5213,7 +5227,7 @@ function invoke-EntraFalconAuth {
                 PimforEntra = @{
                     Any = {
                         $tokens = Invoke-Refresh -RefreshToken $GLOBALPIMsGraphAccessToken.refresh_token `
-                                                -ClientId "eb20f3e3-3dce-4d2c-b721-ebb8d4414067" `
+                                                -ClientId "51f81489-12ee-4a9e-aaae-a2591f45987d" `
                                                 -DisableJwtParsing @GLOBALAuthParameters
                         $global:GLOBALPIMsGraphAccessToken = $tokens
                         $true
