@@ -107,7 +107,7 @@ function Invoke-CheckEnterpriseApps {
     write-host "[*] Get Enterprise Apps"
     $QueryParameters = @{
         '$filter' = "ServicePrincipalType eq 'Application'"
-        '$select' = "Id,DisplayName,PublisherName,accountEnabled,AppRoles,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,PasswordCredentials,KeyCredentials,AppRoleAssignmentRequired"
+        '$select' = "Id,DisplayName,PublisherName,accountEnabled,AppRoles,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,PasswordCredentials,KeyCredentials,AppRoleAssignmentRequired,preferredSingleSignOnMode"
         '$top' = $ApiTop
     }
     $EnterpriseApps = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
@@ -147,7 +147,7 @@ function Invoke-CheckEnterpriseApps {
 
     # Filter out MS enterprise apps
     if (!$IncludeMsApps) {
-        $EnterpriseApps = $EnterpriseApps | where-object {-not($GLOBALMsTenantIds -contains $_.AppOwnerOrganizationId) -and $_.DisplayName -ne "O365 LinkedIn Connection" -and $_.DisplayName -ne "P2P Server"} | select-object Id,DisplayName,accountEnabled,PublisherName,AppRoles,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,PasswordCredentials,KeyCredentials,AppRoleAssignmentRequired
+        $EnterpriseApps = $EnterpriseApps | where-object {-not($GLOBALMsTenantIds -contains $_.AppOwnerOrganizationId) -and $_.DisplayName -ne "O365 LinkedIn Connection" -and $_.DisplayName -ne "P2P Server"} | select-object Id,DisplayName,accountEnabled,PublisherName,AppRoles,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,PasswordCredentials,KeyCredentials,AppRoleAssignmentRequired,preferredSingleSignOnMode
         $EnterpriseAppsCount = $($EnterpriseApps.count)
         write-host "[i] Filtered out Microsoft Applications. $EnterpriseAppsCount left (use -IncludeMsApps to include them)"
     } else {
@@ -1127,6 +1127,7 @@ function Invoke-CheckEnterpriseApps {
             OwnerSPDetails = $OwnerSPDetails
             AppRegObjectId = $AppRegObjectId
             AppRoleRequired = $item.AppRoleAssignmentRequired
+            SAML = ($item.preferredSingleSignOnMode -eq "saml")
             Credentials = $AppCredentialsCount
             AppCredentialsDetails = $AppCredentials
             AppApiPermission = $AppApiPermission
@@ -1220,7 +1221,7 @@ function Invoke-CheckEnterpriseApps {
     write-host "[*] Generating reports"
 
     #Define output of the main table
-    $tableOutput = $AllServicePrincipal | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,Inactive,LastSignInDays,CreationInDays,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,EntraRoles,Owners,Credentials,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $AllServicePrincipal | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,Inactive,SAML,LastSignInDays,CreationInDays,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,EntraRoles,Owners,Credentials,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,Impact,Likelihood,Risk,Warnings
     
     #Define the apps to be displayed in detail and sort them by risk score
     $details = $AllServicePrincipal | Sort-Object Risk -Descending
@@ -1265,6 +1266,7 @@ function Invoke-CheckEnterpriseApps {
             "MS Default" = $($item.DefaultMS)
             "Foreign" = $($item.Foreign)
             "Require AppRole" = $($item.AppRoleRequired)
+            "SAML" = $($item.SAML)
             "RiskScore" = $($item.Risk)
         }
         #If it is not a foreign app, add the link to the appreg
@@ -1273,7 +1275,7 @@ function Invoke-CheckEnterpriseApps {
         }
 
         #Build dynamic TXT report property list
-        $TxtReportProps = @("App Name","Publisher Name","Publisher TenantId","Enabled", "App Client-ID","App Object-ID","MS Default","Foreign","Require AppRole","RiskScore")
+        $TxtReportProps = @("App Name","Publisher Name","Publisher TenantId","Enabled", "App Client-ID","App Object-ID","MS Default","Foreign","Require AppRole","SAML","RiskScore")
 
         if ($item.Warnings -ne '') {
             $ReportingEntAppInfo | Add-Member -NotePropertyName Warnings -NotePropertyValue $item.Warnings
@@ -1678,7 +1680,7 @@ function Invoke-CheckEnterpriseApps {
     write-host "[*] Writing log files"
     write-host
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,Inactive,LastSignInDays,CreationInDays,Owners,Credentials,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,Inactive,SAML,LastSignInDays,CreationInDays,Owners,Credentials,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
@@ -1745,8 +1747,8 @@ $headerHtml = @"
 
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | format-table DisplayName,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,Inactive,LastSignInDays,CreationInDays,Owners,Credentials,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object DisplayName,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,Inactive,LastSignInDays,CreationInDays,Owners,Credentials,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    $tableOutput | format-table DisplayName,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,Inactive,SAML,LastSignInDays,CreationInDays,Owners,Credentials,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $tableOutput | select-object DisplayName,AppRoleRequired,PublisherName,DefaultMS,Foreign,Enabled,Inactive,SAML,LastSignInDays,CreationInDays,Owners,Credentials,AppRoles,GrpMem,GrpOwn,AppOwn,SpOwn,EntraRoles,AzureRoles,ApiDangerous, ApiHigh, ApiMedium, ApiLow, ApiMisc,ApiDelegated,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $AppendixHeaderTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $ApiPermissionReference | Format-Table -AutoSize | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
