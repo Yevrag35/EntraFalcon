@@ -1039,6 +1039,15 @@ $global:GLOBALJavaScript_Table = @'
             renderPagination();
             renderInfo(start, end);
 
+            const pageIds = pageData
+                .map(row => extractAnchorIdAndText(row[columns[0]]).id)
+                .filter(Boolean);
+            if (window.__syncDetailsForCurrentPage) {
+                window.__syncDetailsForCurrentPage(pageIds);
+            } else {
+                window.__pendingDetailIds = pageIds;
+            }
+
             const table = wrapper.querySelector("table");
             if (table) {
                 const headerCells = table.querySelectorAll("thead tr:first-child th");
@@ -1422,6 +1431,24 @@ $global:GLOBALJavaScript_Table = @'
         if (objectContainer) {
             objectContainer.innerHTML = '';
 
+            const updateDetailsInfo = () => {
+                const infoEl = document.getElementById('details-info');
+                if (!infoEl) return;
+                const total = objectContainer.querySelectorAll('details').length;
+                const shownStart = total === 0 ? 0 : 1;
+                const shownEnd = total;
+                infoEl.textContent = `Showing ${shownStart}-${shownEnd} of ${total} entries`;
+            };
+
+            const objectsById = new Map();
+            objects.forEach(obj => {
+                const objectId = obj["Object ID"] || obj["ObjectId"] || obj["Id"];
+                if (objectId) {
+                    objectsById.set(String(objectId), obj);
+                }
+            });
+            window.__objectsById = objectsById;
+
             const renderDetailsTable = (title, data) => {
                 const section = document.createElement('div');
                 const heading = document.createElement('h3');
@@ -1450,6 +1477,35 @@ $global:GLOBALJavaScript_Table = @'
                 return section;
             };
 
+            const renderDetailsContent = (detailsEl, obj) => {
+                if (!detailsEl || !obj || detailsEl.dataset.rendered === "true") return;
+
+                for (let [key, value] of Object.entries(obj)) {
+                    key = key.trim();
+                    if (!value || (Array.isArray(value) && value.length === 0)) continue;
+
+                    if (Array.isArray(value)) {
+                        const allStrings = value.every(v => typeof v === 'string');
+                        const objectsOnly = value.filter(v => typeof v === 'object');
+
+                        if (objectsOnly.length) {
+                            detailsEl.appendChild(renderDetailsTable(key, objectsOnly));
+                        } else if (allStrings) {
+                            detailsEl.appendChild(renderPreBlock(key, value));
+                        }
+                    } else if (typeof value === 'object') {
+                        if (key === "General Information") {
+                            detailsEl.appendChild(renderVerticalTable(key, value));
+                        } else {
+                            detailsEl.appendChild(renderDetailsTable(key, [value]));
+                        }
+                    }
+                }
+
+                detailsEl.dataset.rendered = "true";
+            };
+            window.__renderDetailsContent = renderDetailsContent;
+
             // Render vertical table
             const renderVerticalTable = (title, obj) => {
                 const section = document.createElement('div');
@@ -1473,39 +1529,50 @@ $global:GLOBALJavaScript_Table = @'
                 return section;
             };
 
-            objects.forEach(obj => {
+            const createDetailsShell = (obj) => {
                 const details = document.createElement('details');
-
-                const objectId = obj["Object ID"];
+                const objectId = obj["Object ID"] || obj["ObjectId"] || obj["Id"];
                 details.id = objectId;
                 const summary = document.createElement('summary');
                 summary.textContent = obj["Object Name"] || objectId;
                 details.appendChild(summary);
 
-                for (let [key, value] of Object.entries(obj)) {
-                    key = key.trim();
-                    if (!value || (Array.isArray(value) && value.length === 0)) continue;
+                details.addEventListener('toggle', () => {
+                    if (details.open) {
+                        renderDetailsContent(details, obj);
+                    }
+                });
 
-                    if (Array.isArray(value)) {
-                        const allStrings = value.every(v => typeof v === 'string');
-                        const objectsOnly = value.filter(v => typeof v === 'object');
+                return details;
+            };
 
-                        if (objectsOnly.length) {
-                            details.appendChild(renderDetailsTable(key, objectsOnly));
-                        } else if (allStrings) {
-                            details.appendChild(renderPreBlock(key, value));
-                        }
-                    } else if (typeof value === 'object') {
-                        if (key === "General Information") {
-                            details.appendChild(renderVerticalTable(key, value));
-                        } else {
-                            details.appendChild(renderDetailsTable(key, [value]));
-                        }
+            window.__syncDetailsForCurrentPage = (ids) => {
+                const uniqueIds = Array.isArray(ids) ? Array.from(new Set(ids.map(String))) : [];
+                objectContainer.innerHTML = '';
+
+                uniqueIds.forEach(id => {
+                    const obj = objectsById.get(id);
+                    if (!obj) return;
+                    const details = createDetailsShell(obj);
+                    objectContainer.appendChild(details);
+                });
+
+                if (window.location.hash) {
+                    const targetId = window.location.hash.replace('#', '');
+                    if (targetId && !uniqueIds.includes(targetId) && objectsById.has(targetId)) {
+                        const obj = objectsById.get(targetId);
+                        const details = createDetailsShell(obj);
+                        objectContainer.appendChild(details);
                     }
                 }
 
-                objectContainer.appendChild(details);
-            });
+                updateDetailsInfo();
+            };
+
+            if (window.__pendingDetailIds) {
+                window.__syncDetailsForCurrentPage(window.__pendingDetailIds);
+                delete window.__pendingDetailIds;
+            }
 
 
         } else {
@@ -1516,9 +1583,21 @@ $global:GLOBALJavaScript_Table = @'
         function scrollToObjectByHash() {
             const targetId = window.location.hash.replace('#', '');
             if (!targetId) return;
-        
-            const targetElement = document.getElementById(targetId);
+
+            let targetElement = document.getElementById(targetId);
+            if (!targetElement && window.__syncDetailsForCurrentPage) {
+                window.__syncDetailsForCurrentPage([targetId]);
+                targetElement = document.getElementById(targetId);
+            }
+
             if (targetElement) {
+                if (targetElement.dataset.rendered !== "true" && window.__renderDetailsContent && window.__objectsById) {
+                    const obj = window.__objectsById.get(targetId);
+                    if (obj) {
+                        window.__renderDetailsContent(targetElement, obj);
+                    }
+                }
+
                 targetElement.open = true;
                 setTimeout(() => {
                     targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -2489,6 +2568,18 @@ $global:GLOBALCss = @"
     }
 
     /* -- Details Section -- */
+    .details-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 10px 0;
+        gap: 12px;
+    }
+
+    .details-info {
+        font-size: 14px;
+        white-space: nowrap;
+    }
     .column-toggle-wrapper {
         position: relative;
         display: inline-block;

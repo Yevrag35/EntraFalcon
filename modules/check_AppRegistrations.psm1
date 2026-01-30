@@ -927,8 +927,9 @@ function Invoke-CheckAppRegistrations {
     $AllObjectDetailsHTML = $AllObjectDetailsHTML | ConvertTo-Json -Depth 5 -Compress
 $ObjectsDetailsHEAD = @'
     <h2>App Registrations Details</h2>
-    <div style="margin: 10px 0;">
+    <div class="details-toolbar">
         <button id="toggle-expand">Expand All</button>
+        <div id="details-info" class="details-info">Showing 0-0 of 0 entries</div>
     </div>
     <div id="object-container"></div>
     <script id="object-data" type="application/json">
