@@ -567,7 +567,7 @@ $global:GLOBALJavaScript_Table = @'
             "SPOwn": "Owner of ServicePrincipals",
             "ApiDeleg": "Unique consented delegated API permissions",
             "PIM": "Onboarded to PIM for Groups",
-            "Protected": "Cannot be modified by low-tier admins",
+            "Protected": "Not role assignable, not synced from on-prem, not in a restricted Administrative Unit.\nTherefore: cannot be modified by low-tier admin",
             "AssignmentType": "Activated eligible assignments also appear as active",
             "Conditions": "Has additional conditions"
         };
