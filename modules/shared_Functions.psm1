@@ -218,7 +218,7 @@ $global:GLOBALJavaScript_Table = @'
                         AzureRoles: "or_>0",
                         Warnings: "or_delegated API permission||through group"
                     },
-                    columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Apps with Credentials (Excludes SAML)",
