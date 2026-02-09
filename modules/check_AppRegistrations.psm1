@@ -586,7 +586,7 @@ function Invoke-CheckAppRegistrations {
             DisplayNameLink = "<a href=#$($item.Id)>$($item.DisplayName)</a>"
             AppId = $item.AppId
             SignInAudience = $item.signInAudience
-            OwnerCount = ($AppOwnerUsers | Measure-Object).Count + ($AppOwnerSPs | Measure-Object).Count
+            Owners = ($AppOwnerUsers | Measure-Object).Count + ($AppOwnerSPs | Measure-Object).Count
             SecretsCount = $SecretsCount
             CertsCount = $CertificateCount
             AppCredentialsDetails = $AppCredentials
@@ -619,7 +619,7 @@ function Invoke-CheckAppRegistrations {
 
 
     #Define Table for output
-    $tableOutput = $AllAppRegistrations | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,CreationInDays,SignInAudience,AppRoles,AppLock,OwnerCount,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $AllAppRegistrations | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,CreationInDays,SignInAudience,AppRoles,AppLock,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
     
 
     #Define the apps to be displayed in detail and sort them by risk score
@@ -917,7 +917,7 @@ function Invoke-CheckAppRegistrations {
     write-host "[*] Writing log files"
     write-host
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},SignInAudience,AppLock,CreationInDays,AppRoles,OwnerCount,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},SignInAudience,AppLock,CreationInDays,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
@@ -983,8 +983,8 @@ $headerHtml = @"
 
     #Write TXT and CSV files
     $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | format-table DisplayName,SignInAudience,CreationInDays,AppLock,AppRoles,OwnerCount,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object DisplayName,SignInAudience,CreationInDays,AppLock,AppRoles,OwnerCount,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    $tableOutput | format-table DisplayName,SignInAudience,CreationInDays,AppLock,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $tableOutput | select-object DisplayName,SignInAudience,CreationInDays,AppLock,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $AppsWithSecrets = $AppsWithSecrets | sort-object DisplayName | select-object AppName,Displayname,StartDateTime,EndDateTime,Expired
     if (($AppsWithSecrets | Measure-Object).count -ge 1) {

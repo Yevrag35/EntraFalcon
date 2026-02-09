@@ -172,9 +172,12 @@ $global:GLOBALJavaScript_Table = @'
                         ApiMedium: "or_>0",
                         AppOwn: "or_>0",
                         SpOwn: "or_>0",
+                        ApiDelegatedDangerous: "or_>0",
+                        ApiDelegatedHigh: "or_>0",
+                        ApiDelegatedMedium: "or_>0",
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0",
-                        Warnings: "or_delegated API permission||through group"
+                        Warnings: "or_through group"
                     },
                     columns: ["DisplayName", "PublisherName", "Enabled", "Inactive", "Foreign", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
@@ -186,16 +189,17 @@ $global:GLOBALJavaScript_Table = @'
                         ApiHigh: "or_>0",
                         ApiMedium: "or_>0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Foreign Apps: Extensive API Privs (Delegated)",
                     filters: { 
                         Foreign: "=True", 
-                        ApiDelegated: ">0",
-                        Warnings: "delegated API permission"
+                        ApiDelegatedDangerous: "or_>0",
+                        ApiDelegatedHigh: "or_>0",
+                        ApiDelegatedMedium: "or_>0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium","ApiDelegatedLow", "ApiDelegatedMisc", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Foreign Apps: With Roles",
@@ -204,7 +208,7 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "EntraRoles", "AzureRoles", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "EntraRoles", "AzureRoles", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Internal Apps: Privileged",
@@ -212,13 +216,15 @@ $global:GLOBALJavaScript_Table = @'
                         Foreign: "=False", 
                         ApiDangerous: "or_>0",
                         ApiHigh: "or_>0",
+                        ApiDelegatedDangerous: "or_>0",
+                        ApiDelegatedHigh: "or_>0",
                         AppOwn: "or_>0",
                         SpOwn: "or_>0",
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0",
-                        Warnings: "or_delegated API permission||through group"
+                        Warnings: "or_through group"
                     },
-                    columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "Foreign", "Enabled", "Inactive", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegatedDangerous", "ApiDelegatedHigh", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Apps with Credentials (Excludes SAML)",
@@ -226,14 +232,14 @@ $global:GLOBALJavaScript_Table = @'
                         Credentials: ">0",
                         SAML: "=false",
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "SAML", "Credentials", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "SAML", "Credentials", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Apps with Owners",
                     filters: {
                         Owners: ">0"
                     },
-                    columns: ["DisplayName", "PublisherName", "Foreign", "Owners", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["DisplayName", "PublisherName", "Foreign", "Enabled", "Owners", "GrpMem", "GrpOwn", "AppOwn", "SpOwn", "EntraRoles", "AzureRoles", "ApiDangerous", "ApiHigh", "ApiMedium", "ApiLow", "ApiMisc", "ApiDelegated", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Inactive Apps",
@@ -286,7 +292,7 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     label: "Apps with Owners",
                     filters: {
-                        OwnerCount: ">0"
+                        Owners: ">0"
                     }
                 },
                 {
@@ -528,7 +534,7 @@ $global:GLOBALJavaScript_Table = @'
         };
 
         //Define columns which are hidden by default
-        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval"];
+        const defaultHidden = ["DeviceReg", "DeviceOwn", "LicenseStatus", "OwnersSynced", "DefaultMS", "CreationInDays", "AppRoleRequired", "SAML", "RoleAssignable", "LastSignInDays", "CreatedDays","ActiveAssignJustification","AlertAssignEligible","AlertAssignActive", "AlertActivation", "EligibleExpirationTime", "ActiveExpirationTime", "SignInFrequency", "SignInFrequencyInterval", "ApiDelegatedDangerous", "ApiDelegatedHigh", "ApiDelegatedMedium", "ApiDelegatedLow", "ApiDelegatedMisc"];
 
         // Function to obtain the GET parameters from the URL
         function getURLParams() {
