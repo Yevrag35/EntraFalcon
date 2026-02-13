@@ -396,11 +396,13 @@ function Invoke-CheckCaps {
     # Create an list to store formatted policies
     $ConditionalAccessPolicies = [System.Collections.Generic.List[pscustomobject]]::new()
 
+    #region Processing Loop
     #Main processing of the results
     foreach ($policy in $AllPolicies) {
         $ProgressCounter ++
         $WarningPolicy = ""
         $ErrorMessages = @()
+        $additionalConditionTypes = 0
 
         # Display status based on the objects numbers (slightly improves performance)
         if ($ProgressCounter % $StatusUpdateInterval -eq 0 -or $ProgressCounter -eq $AllPoliciesCount) {
@@ -1059,6 +1061,7 @@ function Invoke-CheckCaps {
             SignInFrequency = $SignInFrequency
             SignInFrequencyInterval = $SignInFrequencyInterval
             AuthContextId = $AuthContextId
+            AdditionalConditionTypes = $additionalConditionTypes
             UserActions = $policy.Conditions.Applications.IncludeUserActions -join ", "
             AppTypes = $policy.Conditions.ClientAppTypes -join ", "
             Warnings = $WarningPolicy
@@ -1068,7 +1071,7 @@ function Invoke-CheckCaps {
             Write-Log -Level Trace -Message "Policy '$($policy.DisplayName)' warnings: $WarningPolicy"
         }
     }
-
+    #endregion
 
     write-host "[*] Processing results"
     Write-Log -Level Debug -Message "Processed $($ConditionalAccessPolicies.Count) conditional access policies"
