@@ -160,7 +160,7 @@ function Invoke-CheckAppRegistrations {
     # Get Enterprise Apps (to check the permissions)
     write-host "[*] Get App Registrations"
     $QueryParameters = @{
-        '$select' = "Id,AppID,DisplayName,SignInAudience,RequiredResourceAccess,ServicePrincipalLockConfiguration,web,createdDateTime,KeyCredentials,PasswordCredentials,AppRoles,Spa,Windows,PublicClient,DefaultRedirectUri,isFallbackPublicClient"
+        '$select' = "Id,AppID,DisplayName,isDisabled,SignInAudience,RequiredResourceAccess,ServicePrincipalLockConfiguration,web,createdDateTime,KeyCredentials,PasswordCredentials,AppRoles,Spa,Windows,PublicClient,DefaultRedirectUri,isFallbackPublicClient"
     }
     $AppRegistrations = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/applications' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
     $AppsTotalCount = $($AppRegistrations.count)
@@ -248,6 +248,7 @@ function Invoke-CheckAppRegistrations {
         $WebRedirectUris = $item.Web.RedirectUris -join ", "
         $WindowsRedirectUris = $item.Windows.RedirectUris -join ", "
         $PublicClientRedirectUris = $item.PublicClient.RedirectUris -join ", "
+        $AppEnabled = -not ($item.isDisabled -eq $true)
 
         $ProgressCounter ++
 
@@ -586,6 +587,7 @@ function Invoke-CheckAppRegistrations {
             DisplayName = $item.DisplayName
             DisplayNameLink = "<a href=#$($item.Id)>$($item.DisplayName)</a>"
             AppId = $item.AppId
+            Enabled = $AppEnabled
             SignInAudience = $item.signInAudience
             Owners = ($AppOwnerUsers | Measure-Object).Count + ($AppOwnerSPs | Measure-Object).Count
             SecretsCount = $SecretsCount
@@ -621,7 +623,7 @@ function Invoke-CheckAppRegistrations {
 
 
     #Define Table for output
-    $tableOutput = $AllAppRegistrations | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,CreationInDays,SignInAudience,AppRoles,AppLock,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $AllAppRegistrations | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,Enabled,CreationInDays,SignInAudience,AppRoles,AppLock,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
     
 
     #Define the apps to be displayed in detail and sort them by risk score
@@ -652,12 +654,13 @@ function Invoke-CheckAppRegistrations {
             "App Object-ID" = $($item.Id)
             "CreationDate" = $($item.CreationDate)
             "Enterprise App Link" = "<a href=EnterpriseApps_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($item.SPObjectId)>$($item.DisplayName)</a>"
+            "Enabled" = $($item.Enabled)
             "SignInAudience" = $($item.SignInAudience)
             "RiskScore" = $($item.Risk)
         }
 
         #Build dynamic TXT report property list
-        $TxtReportProps = @("App Name","App Client-ID","App Object-ID","CreationDate","SignInAudience","RiskScore")
+        $TxtReportProps = @("App Name","App Client-ID","App Object-ID","CreationDate","Enabled","SignInAudience","RiskScore")
 
         if ($null -ne $item.AppHomePage) {
             $ReportingAppRegInfo | Add-Member -NotePropertyName URL -NotePropertyValue $item.AppHomePage
@@ -919,7 +922,7 @@ function Invoke-CheckAppRegistrations {
     write-host "[*] Writing log files"
     write-host
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},SignInAudience,AppLock,CreationInDays,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},SignInAudience,Enabled,AppLock,CreationInDays,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
@@ -985,8 +988,8 @@ $headerHtml = @"
 
     #Write TXT and CSV files
     $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | format-table DisplayName,SignInAudience,CreationInDays,AppLock,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object DisplayName,SignInAudience,CreationInDays,AppLock,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    $tableOutput | format-table DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $tableOutput | select-object DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $AppsWithSecrets = $AppsWithSecrets | sort-object DisplayName | select-object AppName,Displayname,StartDateTime,EndDateTime,Expired
     if (($AppsWithSecrets | Measure-Object).count -ge 1) {
