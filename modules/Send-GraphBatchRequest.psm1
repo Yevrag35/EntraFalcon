@@ -24,7 +24,7 @@
     Default: `python-requests/2.32.3`
 
 .PARAMETER MaxRetries
-    Specifies the maximum number of retry attempts for failed requests. Default is 5.
+    Specifies the maximum number of retry attempts for failed requests. Default is 6.
 
 .PARAMETER BetaAPI
     If specified, uses the Graph Beta endpoint instead of v1.0.
@@ -105,7 +105,7 @@ function Send-GraphBatchRequest {
         [Parameter(Mandatory = $true)]
         [array]$Requests,
 
-        [int]$MaxRetries = 5,
+        [int]$MaxRetries = 6,
         [int]$JsonDepthRequest = 10,
         [int]$JsonDepthResponse = 10,
         [string]$UserAgent = "Mozilla/5.0 (Windows NT 10.0; Microsoft Windows 10.0.19045; en-us) PowerShell/7.5.0",
@@ -143,6 +143,8 @@ function Send-GraphBatchRequest {
     foreach ($Batch in $Batches) {
         $PendingRequests = $Batch
         $RetryCount = 0
+        $RetryableStatusCodes = @(429, 500, 502, 503, 504)
+        $LastRetryableErrors = @{}
 
         foreach ($req in $PendingRequests) {
             $effectiveParams = @{}
@@ -198,6 +200,7 @@ function Send-GraphBatchRequest {
             }
 
             $FailedRequests = @()
+            $RetryDelaySeconds = [math]::Pow(2, $RetryCount)
             foreach ($Resp in $Response.responses) {
                 if ($Resp.status -ge 200 -and $Resp.status -lt 300) {
                     $ResultData = $Resp.body
@@ -212,22 +215,61 @@ function Send-GraphBatchRequest {
                     $ErrorCode = $Resp.body.error.code
                     $ErrorMessage = $Resp.body.error.message
 
-                    #Output error if not silent
-                    if (-not $silent) {
-                        Write-Host "[!] Graph Batch Request: ID $($Resp.id) failed with status $($Resp.status): $ErrorCode - $ErrorMessage"
-                    }
-                    if ($Resp.status -in @(429, 500, 502, 503, 504)) {
+                    if ($Resp.status -in $RetryableStatusCodes) {
                         $FailedRequests += $Batch | Where-Object { $_.id -eq $Resp.id }
-                        Start-Sleep -Seconds ([math]::Pow(2, $RetryCount))
+                        $LastRetryableErrors[$Resp.id] = @{
+                            status = $Resp.status
+                            errorCode = $ErrorCode
+                            errorMessage = $ErrorMessage
+                        }
+
+                        if (-not $Silent) {
+                            if ($Resp.status -eq 429) {
+                                Write-Host ("[i] Request ID {0} was throttled (429). Retrying automatically in {1}s (attempt {2}/{3}). No action needed." -f $Resp.id, $RetryDelaySeconds, ($RetryCount + 1), $MaxRetries)
+                            } else {
+                                Write-Host ("[i] Request ID {0} hit a temporary Graph error ({1}). Retrying automatically in {2}s (attempt {3}/{4})." -f $Resp.id, $Resp.status, $RetryDelaySeconds, ($RetryCount + 1), $MaxRetries)
+                            }
+                        }
                     } else {
+                        if (-not $Silent) {
+                            Write-Host "[!] Graph Batch Request: ID $($Resp.id) failed with status $($Resp.status): $ErrorCode - $ErrorMessage"
+                        }
                         $Results.Add(@{ id = $Resp.id; status = $Resp.status; errorCode = $ErrorCode; errorMessage = $ErrorMessage })
                     }
                 }
             }
 
             $PendingRequests = $FailedRequests
+            if ($PendingRequests.Count -gt 0 -and ($RetryCount + 1) -lt $MaxRetries) {
+                Start-Sleep -Seconds $RetryDelaySeconds
+            }
             $RetryCount++
         } while ($PendingRequests.Count -gt 0 -and $RetryCount -lt $MaxRetries)
+
+        if ($PendingRequests.Count -gt 0) {
+            foreach ($PendingRequest in $PendingRequests) {
+                $RequestId = $PendingRequest.id
+                $LastError = $LastRetryableErrors[$RequestId]
+                $LastStatus = if ($null -ne $LastError) { $LastError.status } else { "unknown" }
+                $LastErrorCode = if ($null -ne $LastError) { $LastError.errorCode } else { $null }
+                $LastErrorMessage = if ($null -ne $LastError) { $LastError.errorMessage } else { "Retry attempts exhausted." }
+
+                if (-not $Silent) {
+                    if ($LastStatus -eq 429) {
+                        Write-Warning ("[!] Request ID {0} remained throttled after {1} retries." -f $RequestId, $MaxRetries)
+                    } else {
+                        Write-Warning ("[!] Request ID {0} still failed with status {1} after {2} retries: {3} - {4}" -f $RequestId, $LastStatus, $MaxRetries, $LastErrorCode, $LastErrorMessage)
+                    }
+                }
+
+                $Results.Add(@{
+                    id = $RequestId
+                    status = $LastStatus
+                    errorCode = $LastErrorCode
+                    errorMessage = $LastErrorMessage
+                })
+            }
+        }
 
         if ($BatchDelay -gt 0) {
             Start-Sleep -Seconds $BatchDelay
