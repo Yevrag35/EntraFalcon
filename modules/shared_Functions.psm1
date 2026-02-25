@@ -37,7 +37,7 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     label: "Tier-0 Users (Entra Only)",
                     filters: {
-                        EntraMaxTier: "or_Tier-0"
+                        EntraMaxTier: "=Tier-0"
                     },
                     columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
@@ -3458,6 +3458,107 @@ function Merge-HigherTierLabel {
     return $currentResolved
 }
 
+# Returns normalized group metadata from the cached AllGroupsDetails hashtable for membership and ownership inheritance paths.
+function Get-GroupDetails {
+    param (
+        [Parameter(Mandatory = $true)]
+        [Object]$Group,
+        [Parameter(Mandatory = $true)]
+        [hashtable]$AllGroupsDetails
+    )
+
+    $GroupDetails = @()
+    $MatchingGroup = $AllGroupsDetails[$($Group.id)]
+
+    if (($MatchingGroup | Measure-Object).count -ge 1) {
+        $GroupDetails = [PSCustomObject]@{
+            Type                   = "Group"
+            Id                     = $Group.Id
+            DisplayName            = $Group.DisplayName
+            Visibility             = $MatchingGroup.Visibility
+            GroupType              = $MatchingGroup.Type
+            SecurityEnabled        = $MatchingGroup.SecurityEnabled
+            RoleAssignable         = $MatchingGroup.RoleAssignable
+            AssignedRoleCount      = $MatchingGroup.EntraRoles
+            AssignedPrivilegedRoles= $MatchingGroup.EntraRolePrivilegedCount
+            InheritedHighValue     = $MatchingGroup.InheritedHighValue
+            EntraMaxTier           = $MatchingGroup.EntraMaxTier
+            EntraRoleDetails       = $MatchingGroup.EntraRoleDetails
+            AzureRoles             = $MatchingGroup.AzureRoles
+            AzureMaxTier           = $MatchingGroup.AzureMaxTier
+            AzureRoleDetails       = $MatchingGroup.AzureRoleDetails
+            CAPs                   = $MatchingGroup.CAPs
+            Impact                 = $MatchingGroup.Impact
+            ImpactOrg              = $MatchingGroup.ImpactOrg
+            ImpactOrgActiveOnly    = $MatchingGroup.ImpactOrgActiveOnly
+            Warnings               = $MatchingGroup.Warnings
+        }
+    }
+
+    return $GroupDetails
+}
+
+# Returns normalized group role metrics (count, privileged count, and max tier) for active-only or active+eligible evaluation paths.
+function Get-GroupActiveRoleMetrics {
+    param (
+        [Parameter(Mandatory = $true)]
+        [Object]$Group,
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("Entra", "Azure")]
+        [string]$RoleSystem,
+        [Parameter(Mandatory = $false)]
+        [switch]$IncludeEligible
+    )
+
+    $detailsProperty = if ($RoleSystem -eq "Entra") { "EntraRoleDetails" } else { "AzureRoleDetails" }
+    $details = @($Group.$detailsProperty | Where-Object { $null -ne $_ })
+
+    if ($details.Count -gt 0) {
+        $assignmentsInScope = if ($IncludeEligible) {
+            @($details)
+        } else {
+            @($details | Where-Object { $_.AssignmentType -eq "Active" })
+        }
+
+        return [PSCustomObject]@{
+            RoleCount       = $assignmentsInScope.Count
+            PrivilegedCount = if ($RoleSystem -eq "Entra") { @($assignmentsInScope | Where-Object { $_.IsPrivileged -eq $true }).Count } else { 0 }
+            MaxTier         = Get-HighestTierLabel -Assignments $assignmentsInScope
+            Source          = if ($IncludeEligible) { "DetailsAll" } else { "DetailsActive" }
+        }
+    }
+
+    # Ownership path can rely on group summary counters that already include inherited role context.
+    if ($IncludeEligible) {
+        if ($RoleSystem -eq "Entra") {
+            $roleCount = 0
+            [void][int]::TryParse([string]$Group.AssignedRoleCount, [ref]$roleCount)
+            $privilegedCount = 0
+            [void][int]::TryParse([string]$Group.AssignedPrivilegedRoles, [ref]$privilegedCount)
+            $maxTier = if ($roleCount -gt 0 -and $Group.EntraMaxTier) { $Group.EntraMaxTier } else { "-" }
+        } else {
+            $roleCount = 0
+            [void][int]::TryParse([string]$Group.AzureRoles, [ref]$roleCount)
+            $privilegedCount = 0
+            $maxTier = if ($roleCount -gt 0 -and $Group.AzureMaxTier) { $Group.AzureMaxTier } else { "-" }
+        }
+
+        return [PSCustomObject]@{
+            RoleCount       = $roleCount
+            PrivilegedCount = $privilegedCount
+            MaxTier         = $maxTier
+            Source          = "SummaryAll"
+        }
+    }
+
+    return [PSCustomObject]@{
+        RoleCount       = 0
+        PrivilegedCount = 0
+        MaxTier         = "-"
+        Source          = "NoDetails"
+    }
+}
+
 # Check if MS Graph is authenticated; if not, call the function for interactive sign-in
 function EnsureAuthMsGraph {
     $result = $false
@@ -3604,11 +3705,7 @@ function AuthCheckAzPSNative {
     if ($null -ne $GLOBALArmAccessToken.access_token) {
         try {
             $url = 'https://management.azure.com/subscriptions?api-version=2022-12-01'
-            $headers = @{   
-                'Authorization' = "Bearer $($GLOBALArmAccessToken.access_token)"
-                'User-Agent' = $($GlobalAuditSummary.UserAgent.Name)
-            }
-            Invoke-RestMethod -Uri $url -Method GET -Headers $headers -erroraction 'Stop'
+            Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop | Out-Null
         } catch {
             write-host "[!] Auth error: $($_.Exception.Message -split '\n')"
             $result = $false
@@ -3625,15 +3722,12 @@ function checkSubscriptionNative {
     $result = $true
 
     $url = 'https://management.azure.com/subscriptions?api-version=2022-12-01'
-    $headers = @{   
-        'Authorization' = "Bearer $($GLOBALArmAccessToken.access_token)"
-        'User-Agent' = $($GlobalAuditSummary.UserAgent.Name)
-    }
-    $Subscription = Invoke-RestMethod -Uri $url -Method GET -Headers $headers -erroraction 'Stop'
+    $Subscription = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
+    $SubscriptionCount = $Subscription.Count
 
-    if ($Subscription.count.value -gt 0) {
-        write-host "[+] User has access to $($Subscription.count.value) Subscription(s)."
-        $GlobalAuditSummary.Subscriptions.Count = $Subscription.count.value
+    if ($SubscriptionCount -gt 0) {
+        write-host "[+] User has access to $SubscriptionCount Subscription(s)."
+        $GlobalAuditSummary.Subscriptions.Count = $SubscriptionCount
     } else {
         write-host "[-] User does not have access to a Subscription."
         $result = $false
@@ -3947,6 +4041,7 @@ function Invoke-EntraRoleProcessing {
 
         #Process Entra Role assignments
         $ImpactScore = 0
+        $EligibleImpactScore = 0
         $Tier0Count = 0
         $Tier1Count = 0
         $Tier2Count = 0
@@ -3954,31 +4049,37 @@ function Invoke-EntraRoleProcessing {
         $roleSummary = ""
         
         foreach ($Role in $RoleDetails) {
+            $RoleImpact = 0
             switch ($Role.RoleTier) {
                 0 {
-                    $ImpactScore += $GLOBALImpactScore["EntraRoleTier0"]
+                    $RoleImpact = $GLOBALImpactScore["EntraRoleTier0"]
                     $Tier0Count++
                     break
                 }
                 1 {
-                    $ImpactScore += $GLOBALImpactScore["EntraRoleTier1"]
+                    $RoleImpact = $GLOBALImpactScore["EntraRoleTier1"]
                     $Tier1Count++
                     break
                 }
                 2 {
-                    $ImpactScore += $GLOBALImpactScore["EntraRoleTier2"]
+                    $RoleImpact = $GLOBALImpactScore["EntraRoleTier2"]
                     $Tier2Count++
                     break
                 }
                 default {
                     $UnknownTierCount++
                     if ($Role.IsPrivileged) {
-                        $ImpactScore += $GLOBALImpactScore["EntraRoleTier?Privileged"]
+                        $RoleImpact = $GLOBALImpactScore["EntraRoleTier?Privileged"]
                     } else {
-                        $ImpactScore += $GLOBALImpactScore["EntraRoleTier?"]
+                        $RoleImpact = $GLOBALImpactScore["EntraRoleTier?"]
                     }
                     break
                 }
+            }
+
+            $ImpactScore += $RoleImpact
+            if ($Role.AssignmentType -eq "Eligible") {
+                $EligibleImpactScore += $RoleImpact
             }
         }
         
@@ -3999,8 +4100,9 @@ function Invoke-EntraRoleProcessing {
         }
         
         return [PSCustomObject]@{
-            ImpactScore = $ImpactScore
-            Warning     = $roleSummary
+            ImpactScore         = $ImpactScore
+            EligibleImpactScore = $EligibleImpactScore
+            Warning             = $roleSummary
         }
 }
 
@@ -4014,6 +4116,7 @@ function Invoke-AzureRoleProcessing {
 
         #Process Entra Role assignments
         $ImpactScore = 0
+        $EligibleImpactScore = 0
         $Tier0Count = 0
         $Tier1Count = 0
         $Tier2Count = 0
@@ -4022,36 +4125,42 @@ function Invoke-AzureRoleProcessing {
         $roleSummary = ""
         
         foreach ($Role in $RoleDetails) {
+            $RoleImpact = 0
             switch ($Role.RoleTier) {
                 0 {
-                    $ImpactScore += $GLOBALImpactScore["AzureRoleTier0"]
+                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier0"]
                     $Tier0Count++
                     break
                 }
                 1 {
-                    $ImpactScore += $GLOBALImpactScore["AzureRoleTier1"]
+                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier1"]
                     $Tier1Count++
                     break
                 }
                 2 {
-                    $ImpactScore += $GLOBALImpactScore["AzureRoleTier2"]
+                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier2"]
                     $Tier2Count++
                     break
                 }
                 3 {
-                    $ImpactScore += $GLOBALImpactScore["AzureRoleTier3"]
+                    $RoleImpact = $GLOBALImpactScore["AzureRoleTier3"]
                     $Tier3Count++
                     break
                 }
                 default {
                     $UnknownTierCount++
                     if ($Role.IsPrivileged) {
-                        $ImpactScore += $GLOBALImpactScore["AzureRoleTier?Privileged"]
+                        $RoleImpact = $GLOBALImpactScore["AzureRoleTier?Privileged"]
                     } else {
-                        $ImpactScore += $GLOBALImpactScore["AzureRoleTier?"]
+                        $RoleImpact = $GLOBALImpactScore["AzureRoleTier?"]
                     }
                     break
                 }
+            }
+
+            $ImpactScore += $RoleImpact
+            if ($Role.AssignmentType -eq "Eligible") {
+                $EligibleImpactScore += $RoleImpact
             }
         }
         
@@ -4073,8 +4182,9 @@ function Invoke-AzureRoleProcessing {
         }
         
         return [PSCustomObject]@{
-            ImpactScore = $ImpactScore
-            Warning     = $roleSummary
+            ImpactScore         = $ImpactScore
+            EligibleImpactScore = $EligibleImpactScore
+            Warning             = $roleSummary
         }
 }
 
@@ -4089,15 +4199,9 @@ function Get-AllAzureIAMAssignmentsNative {
     $IamAssignmentsHT = @{}
     $assignmentsEligible = @()
     $seenAssignments = New-Object System.Collections.Generic.HashSet[System.String]
-    $headers = @{   
-        'Authorization' = "Bearer $($GLOBALArmAccessToken.access_token)"
-        'User-Agent' = $($GlobalAuditSummary.UserAgent.Name)
-    }
-
     #Retrieve role assignments for each subscription and filter by scope
     $url = 'https://management.azure.com/subscriptions?api-version=2022-12-01'
-    $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers -erroraction 'Stop'
-    $subscriptions = $response.value | ForEach-Object {
+    $subscriptions = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop) | ForEach-Object {
         [PSCustomObject]@{
             Id          = $_.subscriptionId
             displayName  = $_.displayName
@@ -4116,9 +4220,9 @@ function Get-AllAzureIAMAssignmentsNative {
 
     #Get all Azure roles for lookup
     $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?api-version=2022-04-01"
-    $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
+    $response = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
     $roleHashTable = @{}
-    $response.value | ForEach-Object {
+    $response | ForEach-Object {
         # Extract RoleName and ObjectId
         $roleName = $_.properties.RoleName
         $RoleType = $_.properties.type
@@ -4134,9 +4238,9 @@ function Get-AllAzureIAMAssignmentsNative {
 
     #Get all custom roles and add them to the HT
     $url = "https://management.azure.com/providers/Microsoft.Authorization/roleDefinitions?`$filter=type+eq+'CustomRole'&api-version=2022-04-01"
-    $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
+    $response = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
 
-    $response.value | ForEach-Object {
+    $response | ForEach-Object {
         # Extract RoleName and ObjectId
         $roleName = $_.properties.RoleName
         $RoleType = $_.properties.type
@@ -4155,8 +4259,8 @@ function Get-AllAzureIAMAssignmentsNative {
     foreach ($subscription in $subscriptions) {       
         #Active Roles
         $url = "https://management.azure.com/subscriptions/$($subscription.Id)/providers/Microsoft.Authorization/roleAssignments?api-version=2022-04-01"
-        $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
-        $AssignmentsActive = $response.value | ForEach-Object {
+        $response = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
+        $AssignmentsActive = $response | ForEach-Object {
             $roleId = ($_.properties.roleDefinitionId -split '/')[-1]
 
             # Null safe check
@@ -4191,21 +4295,19 @@ function Get-AllAzureIAMAssignmentsNative {
         #Eligible Roles
         # If HTTP 400 assuing error message is "The tenant needs to have Microsoft Entra ID P2 or Microsoft Entra ID Governance license.",
         $AzurePIM = $true
+        $response = @()
         try {
             Write-Log -Level Debug -Message "Checking PIM assignments for subscription $($subscription.Id)"
             $url = "https://management.azure.com/subscriptions/$($subscription.Id)/providers/Microsoft.Authorization/roleEligibilitySchedules?api-version=2020-10-01-preview"
-            $response = Invoke-RestMethod -Uri $url -Method GET -Headers $headers
+            $response = @(Send-ApiRequest -Method GET -Uri $url -AccessToken $GLOBALArmAccessToken.access_token -UserAgent $($GlobalAuditSummary.UserAgent.Name) -Silent -ErrorAction Stop)
         } catch {
-            if ($($_.Exception.Message) -match "400") {
-                write-host "[!] HTTP 400 Error: Most likely due to missing Entra ID premium licence. Assuming no PIM for Azure is used."
-            } else {
-                write-host "[!] Auth error: $($_.Exception.Message)"
-            }
+            $apiErrorMessage = [string]$_.Exception.Message
+            Write-Log -Level Debug -Message "$apiErrorMessage"
             $AzurePIM = $false
         }
         $AssignmentsEligible = @()
         if ($AzurePIM) {
-            $AssignmentsEligible = $response.value | ForEach-Object {
+            $AssignmentsEligible = $response | ForEach-Object {
                 $RoleDetails = $roleHashTable[(($_.properties.roleDefinitionId -split '/')[-1])]
                 $hasCondition = ($null -ne $_.properties.condition -and $_.properties.condition.Trim() -ne "")
                 if ($GLOBALAzureRoleRating.ContainsKey($RoleDetails.RoleId)) {
@@ -4727,55 +4829,16 @@ function Get-PimforGroupsAssignments {
             #Use alternative Endpoint for BroCI since no SP with pre-consented privieleges PrivilegedAccess.Read(Write).AzureADGroup exists
             if ($GLOBALAuthMethods.ContainsKey("BroCi")) {
                 Write-Host "[*] Retrieve PIM enabled groups (BroCi / using api.azrbac.mspim.azure.com)"
-                $headers = @{
-                    Authorization = "Bearer $($GLOBALPimForGroupAzrbacAccessToken.access_token)"
-                    "User-Agent"  = $GlobalAuditSummary.UserAgent.Name
-                }
-
                 $uri = "https://api.azrbac.mspim.azure.com/api/v2/privilegedAccess/aadGroups/resources?`$select=id,displayName&`$top=999"
-
-                # Collect all pages
-                $all = New-Object System.Collections.Generic.List[object]
-
-                do {
-                    $resp = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -ErrorAction Stop
-
-                    if ($resp.value) {
-                        foreach ($item in $resp.value) { [void]$all.Add($item) }
-                    }
-
-                    # Some endpoints return nextLink as a property literally named "@odata.nextLink"
-                    $uri = $resp.'@odata.nextLink'
-                }
-                while (-not [string]::IsNullOrWhiteSpace($uri))
-
-                $PimEnabledGroupsRaw = $all
-            }
-
-            else {
+                $PimEnabledGroupsRaw = @(Send-ApiRequest -Method GET -Uri $uri -AccessToken $GLOBALPimForGroupAzrbacAccessToken.access_token -Silent -UserAgent $GlobalAuditSummary.UserAgent.Name -ErrorAction Stop)
+            } else {
                 Write-Host "[*] Retrieve PIM enabled groups (Graph)"
                 $PimEnabledGroupsRaw = Send-GraphRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Method GET -Uri "/privilegedAccess/aadGroups/resources" -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop
             }
-        }
-        catch {
-            # Normalize status code detection across both request styles
-            $statusCode = $null
-
-            # Invoke-RestMethod / Invoke-WebRequest often expose a Response with StatusCode
-            if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
-                $statusCode = [int]$_.Exception.Response.StatusCode
-            }
-            elseif ($_.Exception.Message -match "Status:\s*(\d{3})") {
-                $statusCode = [int]$Matches[1]
-            }
-
-            if ($statusCode -eq 400) {
-                Write-Host "[!] HTTP 400 Error: Most likely due to missing Entra ID premium licence. Assuming no PIM for Groups is used." -ForegroundColor Yellow
-            }
-            else {
-                $msg = ($_.Exception.Message -split "`n")[0]
-                Write-Host "[!] Auth/Request error: $msg. Assuming no PIM for Groups is used." -ForegroundColor Yellow
-            }
+        } catch {
+            $apiErrorMessage = [string]$_.Exception.Message
+            Write-Log -Level Debug -Message "$apiErrorMessage"
+            Write-host "[*] PIM for groups is not used"
 
             $PIMforGroupsAssignments = ""
             $proceed = $false
@@ -4812,7 +4875,7 @@ function Get-PimforGroupsAssignments {
                 }
     
                 # Send Batch request
-                $PIMforGroupsAssignments = (Send-GraphBatchRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)).response.value
+                $PIMforGroupsAssignments = (Send-GraphBatchRequest -AccessToken $GLOBALPimForGroupAccessToken.access_token -Requests $Requests -BetaAPI -BatchDelay 0.3 -UserAgent $($GlobalAuditSummary.UserAgent.Name)).response.value
                 Write-Host "[+] Got $($PIMforGroupsAssignments.Count) objects eligible for a PIM-enabled group"
                 
             } else {
@@ -5685,4 +5748,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics
