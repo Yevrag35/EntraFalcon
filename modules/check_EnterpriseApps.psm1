@@ -180,7 +180,7 @@ function Invoke-CheckEnterpriseApps {
 
     Write-Log -Level Debug -Message "Got $($AppAssignmentsRaw.Count) applications API permissions assignments"
 
-    Write-Host "[*] Get all delegate API permissions"
+    Write-Host "[*] Get all delegated API permissions"
     $Requests = @()
     $EnterpriseApps | ForEach-Object {
         $Requests += @{
@@ -218,7 +218,7 @@ function Invoke-CheckEnterpriseApps {
     }
     Write-Log -Level Debug -Message "Got $($GroupMemberRaw.Count) group memberships"
 
-    Write-Host "[*] Get all applications objects ownerships"
+    Write-Host "[*] Get all application object ownerships"
     $Requests = @()
     $EnterpriseApps | ForEach-Object {
         $Requests += @{
@@ -256,7 +256,7 @@ function Invoke-CheckEnterpriseApps {
     }
     Write-Log -Level Debug -Message "Got $($OwnersRaw.Count) owners"
 
-    Write-Host "[*] Get all app roles assignments"
+    Write-Host "[*] Get all app role assignments"
     $Requests = @()
     $EnterpriseApps | ForEach-Object {
         $Requests += @{
@@ -1100,9 +1100,6 @@ function Invoke-CheckEnterpriseApps {
         #Mark foreign non-default apps as risky
         if ($DefaultMS -eq $false -and $ForeignTenant -eq $true) {
             $LikelihoodScore += $SPLikelihoodScore["ForeignApp"]
-            if ($ImpactScore -gt 10) {
-                $Warnings += "Foreign with permission"
-            }
         } elseif ($DefaultMS -eq $false -and $ForeignTenant -eq $false) {
             $LikelihoodScore += $SPLikelihoodScore["InternApp"]
         }
@@ -1797,7 +1794,7 @@ $headerHtml = @"
     $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
     $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
    
-     write-host "[+] Details of $EnterpriseAppsCount Enterprise Application stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
+     write-host "[+] Details of $EnterpriseAppsCount Enterprise Applications stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
    
     #Add information to the enumeration summary
     $ForeignCount = 0
