@@ -76,6 +76,15 @@ return @"
         $SubscriptionCount = $($GlobalAuditSummary.Subscriptions.Count)
     }
 
+    $securityFindingsSummary = $GlobalAuditSummary.SecurityFindings
+    if ($null -eq $securityFindingsSummary) {
+        $securityFindingsSummary = @{ Vulnerable = 0; NotVulnerable = 0; Skipped = 0; Total = 0 }
+    }
+    $findingsStatusLine = "{0} Vulnerable / {1} Not Vulnerable / {2} Skipped" -f `
+        $securityFindingsSummary.Vulnerable, $securityFindingsSummary.NotVulnerable, $securityFindingsSummary.Skipped
+    $hostOs = Get-EntraFalconHostOs
+    $powerShellDisplay = "V$($PSVersionTable.PSVersion.ToString()) ($hostOs)"
+
     #Define header HTML
     $headerHTML = [pscustomobject]@{ 
         "Tenant Name"                           = $($GlobalAuditSummary.Tenant.Name)
@@ -85,12 +94,13 @@ return @"
         "Start Time"                            = $($GlobalAuditSummary.Time.Start)
         "End Time"                              = $($GlobalAuditSummary.Time.End)
         "EntraFalcon Version"                   = $($GlobalAuditSummary.EntraFalcon.Version)
-        "PowerShell Version"                    = "V$($PSVersionTable.PSVersion.ToString())"
+        "PowerShell Version"                    = $powerShellDisplay
         "UserAgent"                             = $($GlobalAuditSummary.UserAgent.Name)
         "Enumerate Azure IAM"                   = $GLOBALAzurePsChecks
         "Enumerate PIM for Entra/Azure Roles"   = $GLOBALGraphExtendedChecks
         "Enumerate PIM for Groups"              = $GLOBALPimForGroupsChecked
         "Enumerate Default Microsoft SP"        = $MsAppsEnumerated
+        "Security Findings (V/NV/Skipped)"      = $findingsStatusLine
     }
 
 
@@ -698,7 +708,7 @@ Execution Information:
     - Start:          $($GlobalAuditSummary.Time.Start)
     - End:            $($GlobalAuditSummary.Time.End)
     - EntraFalcon:    $($GlobalAuditSummary.EntraFalcon.Version)
-    - PowerShell:     V$($PSVersionTable.PSVersion.ToString())
+    - PowerShell:     $powerShellDisplay
     - UserAgent:      $($GlobalAuditSummary.UserAgent.Name)
 
 Enhanced Checks:
@@ -718,6 +728,7 @@ Enumeration Results:
     - Entra Role Assignments:      $($GlobalAuditSummary.EntraRoleAssignments.Count) ($($GlobalAuditSummary.EntraRoleAssignments.Eligible) Eligible)
     - Azure Role Assignments:      $($GlobalAuditSummary.AzureRoleAssignments.Count) ($($GlobalAuditSummary.AzureRoleAssignments.Eligible) Eligible)
     - Pim Settings:                $($GlobalAuditSummary.PimSettings.Count)
+    - Findings:                    $findingsStatusLine
 "@
 
     # Set generic information which get injected into the HTML
@@ -730,13 +741,17 @@ Enumeration Results:
     $PostContentCombined =  $Chartsection + "`n" + $GLOBALJavaScript
     $CssCombined = $GLOBALcss + $CustomCss + $global:GLOBALReportManifestScript
     $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title" -Head $CssCombined -PostContent $PostContentCombined
-    $Report | Out-File "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
+    $summaryHtmlPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
+    $summaryTxtPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt"
+    $Report | Out-File $summaryHtmlPath
+    $OutputCLI | Out-File -Width 512 -FilePath $summaryTxtPath
 
     # Print to console
-    Write-Host "`n`n================================= Summary =================================" -ForegroundColor Cyan
+    Write-Host "`n`n========================================= Summary =========================================" -ForegroundColor Cyan
     Write-Host $OutputCLI
-    Write-Host "===========================================================================" -ForegroundColor Cyan
-    write-host "[+] Enumeration summary stored at: $outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
+    Write-Host "===========================================================================================" -ForegroundColor Cyan
+    write-host "[+] Enumeration summary stored at: $summaryHtmlPath"
+    write-host "[+] Enumeration summary (txt) stored at: $summaryTxtPath"
     write-host "[+] Run completed successfully"
 }
 
