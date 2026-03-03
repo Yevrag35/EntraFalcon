@@ -32,8 +32,8 @@ function Invoke-CheckManagedIdentities {
         "Base"                     = 1
         "CAPGroupOwner"             = 100
         "InheritedHighValue"        = 200
-        "APIDangerous"              = 300
-        "APIHigh"                   = 200
+        "APIDangerous"              = 800
+        "APIHigh"                   = 400
         "APIMedium"                 = 100
         "APILow"                    = 50
         "ApiMisc"                   = 20
@@ -138,7 +138,7 @@ function Invoke-CheckManagedIdentities {
         }
         Write-Log -Level Debug -Message "Got $($GroupMemberRaw.count) memberships"
 
-        Write-Host "[*] Get all applications objects ownerships"
+        Write-Host "[*] Get all application object ownerships"
         $Requests = @()
         $ManagedIdentities | ForEach-Object {
             $Requests += @{
@@ -1024,7 +1024,7 @@ $headerHtml = @"
         $PostContentCombined = $GLOBALJavaScript + "`n" + $ApiPermissionReferenceHTML
         $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $PostContentCombined -PreContent $AllObjectDetailsHTML
         $Report | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
-        write-host "[+] Details of $ManagedIdentitiesCount Managed Identity stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"    
+        write-host "[+] Details of $ManagedIdentitiesCount Managed Identities stored in output files (CSV,TXT,HTML): $outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName)"    
     } else {
         write-host "[-] No managed Identities exist."
         write-host "[-] No logs have been written."
