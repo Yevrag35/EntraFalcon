@@ -188,7 +188,7 @@ function Invoke-CheckUsers {
     write-host "[+] Got $($UsersTotalCount) users"
 
     # Get all transitve memberships (expensive!)
-    Write-Host "[*] Get all users memberships"
+    Write-Host "[*] Collecting user memberships"
 
     $UserMemberOfRaw = @{}
     $BatchSize = 10000     
@@ -251,7 +251,7 @@ function Invoke-CheckUsers {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
-    Write-Host "[*] Get all users ownerships"
+    Write-Host "[*] Collecting user ownerships"
     #Get all users ownerships for later lookup
     $Requests = New-Object System.Collections.Generic.List[Hashtable]
     foreach ($item in $AllUsers) {
@@ -274,7 +274,7 @@ function Invoke-CheckUsers {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
-    Write-Host "[*] Get all users device ownerships"
+    Write-Host "[*] Collecting user device ownership"
     #Get all users device ownerships for later lookup
     $Requests = New-Object System.Collections.Generic.List[Hashtable]
     foreach ($item in $AllUsers) {
@@ -298,7 +298,7 @@ function Invoke-CheckUsers {
     #Check token validity to ensure it will not expire in the next 30 minutes
     if (-not (Invoke-CheckTokenExpiration $GLOBALmsGraphAccessToken)) { RefreshAuthenticationMsGraph | Out-Null}
 
-    Write-Host "[*] Get all users device registrations"
+    Write-Host "[*] Collecting user device registrations"
     #Get all users device registrations for later lookup
     $Requests = New-Object System.Collections.Generic.List[Hashtable]
     foreach ($item in $AllUsers) {
@@ -644,9 +644,9 @@ function Invoke-CheckUsers {
                 if ($object.AppLock -eq $false) {
                     #takeover impact from SP
                     $AddImpact += $object.Impact
-                    $SpCountAppLock ++
-                } elseif ($object.AppLock -eq $true) {
                     $SpCountAppLockNo ++
+                } elseif ($object.AppLock -eq $true) {
+                    $SpCountAppLock ++
                     #Otherwise, add SP impact or a base value (the lower one)
                     if ($object.Impact -le $UserImpact["SpOwnAppLock"]) {
                         $AddImpact += $object.Impact
