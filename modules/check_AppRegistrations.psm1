@@ -220,6 +220,23 @@ function Invoke-CheckAppRegistrations {
         }
     }
 
+    Write-Host "[*] Get all federated identity credentials"
+    $Requests = @()
+    $AppRegistrations | ForEach-Object {
+        $Requests += @{
+            "id"     = $($_.id)
+            "method" = "GET"
+            "url"    = "/applications/$($_.id)/federatedIdentityCredentials"
+        }
+    }
+    $RawResponse = (Send-GraphBatchRequest -AccessToken $GLOBALmsGraphAccessToken.access_token -Requests $Requests -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+    $AppFederatedCredsRaw = @{}
+    foreach ($item in $RawResponse) {
+        if ($item.response.value -and $item.response.value.Count -gt 0) {
+            $AppFederatedCredsRaw[$item.id] = $item.response.value
+        }
+    }
+
 
     ########################################## SECTION: Data Processing ##########################################
 
@@ -279,7 +296,7 @@ function Invoke-CheckAppRegistrations {
             #The object for apps with secrets require the appname for seperate output file
             [pscustomobject]@{
                 Type = "Secret"
-                DisplayName = $creds.DisplayName
+                DisplayName = if ([string]::IsNullOrWhiteSpace($creds.DisplayName)) { "-" } else { $creds.DisplayName }
                 EndDateTime = $creds.EndDateTime
                 StartDateTime = $creds.StartDateTime
                 Expired = $Expired
@@ -308,7 +325,7 @@ function Invoke-CheckAppRegistrations {
             }
             [pscustomobject]@{
                 Type = "Certificate"
-                DisplayName = $creds.DisplayName
+                DisplayName = if ([string]::IsNullOrWhiteSpace($creds.DisplayName)) { "-" } else { $creds.DisplayName }
                 EndDateTime = $creds.EndDateTime
                 StartDateTime = $creds.StartDateTime
                 Expired = $Expired
@@ -316,6 +333,19 @@ function Invoke-CheckAppRegistrations {
         }
         $AppCredentials += $AppCredentialsSecrets
         $AppCredentials += $AppCredentialsCertificates
+
+        $AppFederatedCreds = @()
+        if ($AppFederatedCredsRaw.ContainsKey($item.Id)) {
+            $AppFederatedCreds = foreach ($credential in $AppFederatedCredsRaw[$item.Id]) {
+                [pscustomobject]@{
+                    Name        = if ([string]::IsNullOrWhiteSpace($credential.name)) { "-" } else { $credential.name }
+                    Issuer      = if ([string]::IsNullOrWhiteSpace($credential.issuer)) { "-" } else { $credential.issuer }
+                    Subject     = if ([string]::IsNullOrWhiteSpace($credential.subject)) { "-" } else { $credential.subject }
+                    Description = if ([string]::IsNullOrWhiteSpace($credential.description)) { "-" } else { $credential.description }
+                    Audiences   = if ($credential.audiences) { ($credential.audiences -join ", ") } else { "-" }
+                }
+            }
+        }
 
         # Combine arrays into a hashtable for easy identification
         $AppRedirectURL = @{
@@ -590,9 +620,11 @@ function Invoke-CheckAppRegistrations {
             Enabled = $AppEnabled
             SignInAudience = $item.signInAudience
             Owners = ($AppOwnerUsers | Measure-Object).Count + ($AppOwnerSPs | Measure-Object).Count
+            FederatedCreds = ($AppFederatedCreds | Measure-Object).Count
             SecretsCount = $SecretsCount
             CertsCount = $CertificateCount
             AppCredentialsDetails = $AppCredentials
+            FederatedCredsDetails = $AppFederatedCreds
             AppOwnerUsers = $AppOwnerUsers
             AppOwnerSPs = $AppOwnerSPs
             CreationDate = $item.createdDateTime
@@ -623,7 +655,7 @@ function Invoke-CheckAppRegistrations {
 
 
     #Define Table for output
-    $tableOutput = $AllAppRegistrations | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,Enabled,CreationInDays,SignInAudience,AppRoles,AppLock,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $AllAppRegistrations | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,Enabled,CreationInDays,SignInAudience,AppRoles,AppLock,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
     
 
     #Define the apps to be displayed in detail and sort them by risk score
@@ -636,6 +668,7 @@ function Invoke-CheckAppRegistrations {
     foreach ($item in $details) {
         $ReportingAppRegInfo = @()
         $ReportingCredentials = @()
+        $ReportingFederatedCreds = @()
         $ReportingAppLock = @()
         $ReportingAppRoles = @()
         $ReportingAppOwnersUser = @()
@@ -660,7 +693,7 @@ function Invoke-CheckAppRegistrations {
         }
 
         #Build dynamic TXT report property list
-        $TxtReportProps = @("App Name","App Client-ID","App Object-ID","CreationDate","Enabled","SignInAudience","RiskScore")
+        $TxtReportProps = @("App Name","App Client-ID","App Object-ID","CreationDate","Enabled","SignInAudience","FederatedCreds","RiskScore")
 
         if ($null -ne $item.AppHomePage) {
             $ReportingAppRegInfo | Add-Member -NotePropertyName URL -NotePropertyValue $item.AppHomePage
@@ -689,6 +722,24 @@ function Invoke-CheckAppRegistrations {
             [void]$DetailTxtBuilder.AppendLine("App Registration Credentials")
             [void]$DetailTxtBuilder.AppendLine("================================================================================================")
             [void]$DetailTxtBuilder.AppendLine(($ReportingCredentials | Out-String))
+        }
+
+        ############### Federated Identity Credentials
+        if (($item.FederatedCredsDetails | Measure-Object).count -ge 1) {
+            $ReportingFederatedCreds = foreach ($object in $item.FederatedCredsDetails) {
+                [pscustomobject]@{
+                    "Name" = $object.Name
+                    "Issuer" = $object.Issuer
+                    "Subject" = $object.Subject
+                    "Description" = $object.Description
+                    "Audiences" = $object.Audiences
+                }
+            }
+
+            [void]$DetailTxtBuilder.AppendLine("================================================================================================")
+            [void]$DetailTxtBuilder.AppendLine("Federated Identity Credentials")
+            [void]$DetailTxtBuilder.AppendLine("================================================================================================")
+            [void]$DetailTxtBuilder.AppendLine(($ReportingFederatedCreds | Format-Table -Property Name,Issuer,Subject,Description,Audiences | Out-String -Width 350))
         }
 
         ############### AppLock
@@ -904,6 +955,7 @@ function Invoke-CheckAppRegistrations {
             "Object ID"       = $item.Id
             "General Information"    = $ReportingAppRegInfo
             "App Credentials"    = $ReportingCredentials
+            "Federated Identity Credentials" = $ReportingFederatedCreds
             "App Instance Property Lock (AppLock)"    = $ReportingAppLock
             "Application Roles"    = $ReportingAppRoles
             "Owners (Users)"    = $ReportingAppOwnersUser
@@ -922,7 +974,7 @@ function Invoke-CheckAppRegistrations {
     write-host "[*] Writing log files"
     write-host
 
-    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},SignInAudience,Enabled,AppLock,CreationInDays,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "DisplayName"; Expression = { $_.DisplayNameLink}},SignInAudience,Enabled,AppLock,CreationInDays,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
@@ -988,14 +1040,13 @@ $headerHtml = @"
 
     #Write TXT and CSV files
     $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | format-table DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | select-object DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+    $tableOutput | format-table DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $tableOutput | select-object DisplayName,SignInAudience,Enabled,CreationInDays,AppLock,AppRoles,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $AppsWithSecrets = $AppsWithSecrets | sort-object DisplayName | select-object AppName,Displayname,StartDateTime,EndDateTime,Expired
     if (($AppsWithSecrets | Measure-Object).count -ge 1) {
         $AppendixClientSecrets  | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
         $AppsWithSecrets | Format-Table | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-        $AppsWithSecrets | Export-Csv -Path "$outputFolder\$($Title)_Secrets_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
         $AppendixSecretsHTML += $AppsWithSecrets | ConvertTo-Html -Fragment -PreContent "<h2>Appendix: Apps With Secrets</h2>"
     }
 
