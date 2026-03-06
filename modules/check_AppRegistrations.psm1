@@ -655,7 +655,7 @@ function Invoke-CheckAppRegistrations {
 
 
     #Define Table for output
-    $tableOutput = $AllAppRegistrations | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,Enabled,CreationInDays,SignInAudience,AppRoles,AppLock,Owners,FederatedCreds,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,Impact,Likelihood,Risk,Warnings
+    $tableOutput = $AllAppRegistrations | Sort-Object -Property risk -Descending | select-object DisplayName,DisplayNameLink,Enabled,CreationInDays,SignInAudience,AppRoles,AppLock,Owners,CloudAppAdmins,AppAdmins,SecretsCount,CertsCount,FederatedCreds,Impact,Likelihood,Risk,Warnings
     
 
     #Define the apps to be displayed in detail and sort them by risk score
@@ -1072,6 +1072,7 @@ $headerHtml = @"
     $AzureADandPersonalMicrosoftAccount = 0
     $AppsSecrets = 0
     $AppsCertificates = 0
+    $AppsFederatedCredentials = 0
     $AppsNoCredentials = 0
 
     foreach ($app in $AllAppRegistrations) {
@@ -1084,7 +1085,10 @@ $headerHtml = @"
         if ($app.CertsCount -ge 1) {
             $AppsCertificates++
         }
-        if ($app.SecretsCount -eq 0 -and $app.CertsCount -eq 0){
+        if ($app.FederatedCreds -ge 1) {
+            $AppsFederatedCredentials++
+        }
+        if ($app.SecretsCount -eq 0 -and $app.CertsCount -eq 0 -and $app.FederatedCreds -eq 0){
             $AppsNoCredentials++
         }
 
@@ -1109,6 +1113,7 @@ $headerHtml = @"
     $GlobalAuditSummary.AppRegistrations.AppLock = $AppLock
     $GlobalAuditSummary.AppRegistrations.Credentials.AppsSecrets = $AppsSecrets
     $GlobalAuditSummary.AppRegistrations.Credentials.AppsCerts = $AppsCertificates
+    $GlobalAuditSummary.AppRegistrations.Credentials.AppsFederatedCreds = $AppsFederatedCredentials
     $GlobalAuditSummary.AppRegistrations.Credentials.AppsNoCreds = $AppsNoCredentials
     $GlobalAuditSummary.AppRegistrations.Audience.SingleTenant = $AzureADMyOrg
     $GlobalAuditSummary.AppRegistrations.Audience.MultiTenant = $AzureADMultipleOrgs
