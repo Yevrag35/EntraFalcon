@@ -32,14 +32,14 @@ $global:GLOBALJavaScript_Table = @'
                         EntraMaxTier: "or_Tier-0",
                         AzureMaxTier: "or_Tier-0",
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Tier-0 Users (Entra Only)",
                     filters: {
                         EntraMaxTier: "=Tier-0"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Users with Roles (Entra ID / Azure)",
@@ -48,7 +48,7 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         Warnings: "or_EntraRoles||AzureRoles"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Users with Roles (Entra ID only)",
@@ -56,7 +56,7 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         Warnings: "or_EntraRoles"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "OnPrem", "EntraRoles", "EntraMaxTier", "Inactive", "MfaCap", "Impact", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Inactive Users",
@@ -64,13 +64,14 @@ $global:GLOBALJavaScript_Table = @'
                         Inactive: "=true",
                         Enabled: "=true"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "Impact", "Likelihood", "Risk", "Warnings"],
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "Impact", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "LastSignInDays", direction: "desc" }
                 },
                 {
                     label: "Users Without MFA Methods",
                     filters: {
                         MfaCap: "=false",
+                        Agent: "=false"
                     }
                 },
                 {
@@ -80,15 +81,23 @@ $global:GLOBALJavaScript_Table = @'
                         EntraRoles: "or_>0",
                         AzureRoles: "or_>0",
                         AppRegOwn: "or_>0",
-                        SPOwn: "or_>0"
+                        SPOwn: "or_>0",
+                        Agent: "=false"
                     },
                     columns: ["UPN", "Enabled", "UserType", "Protected", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "AppRegOwn", "SPOwn", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "New Users",
                     filters: { CreatedDays: "<91"},
-                    columns: ["UPN", "Enabled", "UserType", "EntraRoles", "AzureRoles", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"],
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "EntraRoles", "AzureRoles", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"],
                     sort: { column: "CreatedDays", direction: "asc" }
+                },
+                {
+                    label: "Agent Users",
+                    filters: {
+                        Agent: "=True"
+                    },
+                    columns: ["UPN", "Enabled", "Agent", "GrpMem", "GrpOwn", "AppRegOwn", "SpOwn", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Inactive", "LastSignInDays", "CreatedDays", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                 {
                     label: "Guest Users",
@@ -103,12 +112,13 @@ $global:GLOBALJavaScript_Table = @'
                         AppRegOwn: "or_>0",
                         SPOwn: "or_>0"
                     },
-                    columns: ["UPN", "Enabled", "UserType", "Protected", "AppRegOwn", "SpOwn", "Inactive", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
+                    columns: ["UPN", "Enabled", "UserType", "Agent", "Protected", "AppRegOwn", "SpOwn", "Inactive", "Impact", "MfaCap", "Likelihood", "Risk", "Warnings"]
                 },
                   {
                     label: "Users Disabled Per-User MFA",
                     filters: {
-                        PerUserMfa: "=disabled"
+                        PerUserMfa: "=disabled",
+                        Agent: "=false"
                     },
                     columns: ["UPN", "Enabled", "UserType","LastSignInDays","Inactive", "Impact", "MfaCap", "PerUserMfa", "EntraRoles", "EntraMaxTier", "AzureRoles", "AzureMaxTier", "Likelihood", "Risk", "Warnings"]
                 },
@@ -1750,7 +1760,7 @@ $global:GLOBALJavaScript_Table = @'
 
             const isDark = document.body.classList.contains("dark-mode");
 
-            const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged', 'SAML']);
+            const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged', 'SAML', 'Agent']);
             const redIfFalseHeaders = new Set(['AppLock', 'MfaCap', 'Protected', 'Enabled', 'RoleAssignable', 'ActivationMFA', 'ActivationAuthContext', 'ActivationApproval', 'ActiveAssignMFA', 'EligibleExpiration', 'ActiveExpiration', 'ActivationJustification', 'ActivationTicketing', 'ActiveAssignJustification', 'AlertAssignEligible', 'AlertAssignActive', 'AlertActivation']);
             const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active', 'tier-0', 'tier-1', 'tier-2']);
             const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType', 'EntraMaxTier', 'AzureMaxTier', 'PerUserMfa']);
