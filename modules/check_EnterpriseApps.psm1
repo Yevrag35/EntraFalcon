@@ -515,6 +515,13 @@ function Invoke-CheckEnterpriseApps {
 
         $AzureMaxTier = $DirectAzureMaxTier
         $EntraMaxTier = $DirectEntraMaxTier
+        $EntraRolesDirect = @($AppEntraRoles).Count
+        $AzureRolesDirect = 0
+        [void][int]::TryParse([string]$AzureRoleCount, [ref]$AzureRolesDirect)
+        $EntraRolesThroughGroupMembership = 0
+        $EntraRolesThroughGroupOwnership = 0
+        $AzureRolesThroughGroupMembership = 0
+        $AzureRolesThroughGroupOwnership = 0
 
         # Calculate days since creation
         $CreationInDays = if ($item.createdDateTime) {
@@ -897,6 +904,10 @@ function Invoke-CheckEnterpriseApps {
                     $TotalInheritedHighValue += $Groups.InheritedHighValue
                 }
             }
+            $EntraRolesThroughGroupMembership = $TotalAssignedRoleCount
+            if ($GLOBALAzurePsChecks) {
+                $AzureRolesThroughGroupMembership = $TotalAzureRoles
+            }
 
             #Check Entra role assignments
             if ($TotalAssignedRoleCount -ge 1) {
@@ -966,6 +977,10 @@ function Invoke-CheckEnterpriseApps {
                     }
 
                     $TotalCAPs += $OwnedGroup.CAPs
+                }
+                $EntraRolesThroughGroupOwnership = $TotalAssignedRoleCount
+                if ($GLOBALAzurePsChecks) {
+                    $AzureRolesThroughGroupOwnership = $TotalAzureRoles
                 }
 
                 #Check Entra role assignments
@@ -1119,6 +1134,8 @@ function Invoke-CheckEnterpriseApps {
         } else {
             $LastSignInDays = "-"
         }
+        $EntraRolesEffective = $EntraRolesDirect + $EntraRolesThroughGroupMembership + $EntraRolesThroughGroupOwnership
+        $AzureRolesEffective = $AzureRolesDirect + $AzureRolesThroughGroupMembership + $AzureRolesThroughGroupOwnership
 
         #Write custom object
         $SPInfo = [PSCustomObject]@{ 
@@ -1131,7 +1148,9 @@ function Invoke-CheckEnterpriseApps {
             ServicePrincipalType = $item.servicePrincipalType
             SignInAudience = $item.signInAudience
             GrpMem = ($GroupMember | Measure-Object).count
-            EntraRoles = ($AppEntraRoles | Measure-Object).count
+            EntraRolesDirect = $EntraRolesDirect
+            EntraRolesEffective = $EntraRolesEffective
+            EntraRoles = $EntraRolesEffective
             EntraMaxTier = $EntraMaxTier
             PermissionCount = ($AppAssignments | Measure-Object).count
             GrpOwn = ($OwnedGroups | Measure-Object).count
@@ -1146,7 +1165,9 @@ function Invoke-CheckEnterpriseApps {
             AppPermission = $AppAssignments
             Foreign = $ForeignTenant
             DefaultMS = $DefaultMS
-            AzureRoles = $AzureRoleCount
+            AzureRolesDirect = $AzureRolesDirect
+            AzureRolesEffective = $AzureRolesEffective
+            AzureRoles = $AzureRolesEffective
             AzureMaxTier = $AzureMaxTier
             Inactive = $Inactive
             LastSignInDays = $LastSignInDays

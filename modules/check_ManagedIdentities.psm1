@@ -311,6 +311,13 @@ function Invoke-CheckManagedIdentities {
 
         $AzureMaxTier = $DirectAzureMaxTier
         $EntraMaxTier = $DirectEntraMaxTier
+        $EntraRolesDirect = @($AppEntraRoles).Count
+        $AzureRolesDirect = 0
+        [void][int]::TryParse([string]$AzureRoleCount, [ref]$AzureRolesDirect)
+        $EntraRolesThroughGroupMembership = 0
+        $EntraRolesThroughGroupOwnership = 0
+        $AzureRolesThroughGroupMembership = 0
+        $AzureRolesThroughGroupOwnership = 0
 
         #Get all groups where the SP is member of
         $GroupMember = [System.Collections.ArrayList]::new()
@@ -494,7 +501,10 @@ function Invoke-CheckManagedIdentities {
                         $TotalInheritedHighValue += $Groups.InheritedHighValue
                     }
                 }
-
+                $EntraRolesThroughGroupMembership = $TotalAssignedRoleCount
+                if ($GLOBALAzurePsChecks) {
+                    $AzureRolesThroughGroupMembership = $TotalAzureRoles
+                }
                 #Check Entra role assignments
                 if ($TotalAssignedRoleCount -ge 1) {
                     if ($TotalAssignedPrivilegedRoles -ge 1) {
@@ -502,6 +512,7 @@ function Invoke-CheckManagedIdentities {
                     } else {
                         $privileged = ""
                     }
+                    
                     $Warnings += "$($privileged)Entra role(s) through group membership"
                 }
 
@@ -564,6 +575,10 @@ function Invoke-CheckManagedIdentities {
                     }
 
                     $TotalCAPs += $OwnedGroup.CAPs
+                }
+                $EntraRolesThroughGroupOwnership = $TotalAssignedRoleCount
+                if ($GLOBALAzurePsChecks) {
+                    $AzureRolesThroughGroupOwnership = $TotalAzureRoles
                 }
 
                 #Check Entra role assignments
@@ -637,14 +652,14 @@ function Invoke-CheckManagedIdentities {
             if ($severities.Count -gt 1) { $plural = "s" }
             $Warnings += "Known $joined API permission$plural!"
         }
-
+        $EntraRolesEffective = $EntraRolesDirect + $EntraRolesThroughGroupMembership + $EntraRolesThroughGroupOwnership
+        $AzureRolesEffective = $AzureRolesDirect + $AzureRolesThroughGroupMembership + $AzureRolesThroughGroupOwnership
         #Format warning messages
         $Warnings = if ($null -ne $Warnings) {
             $Warnings -join ' / '
         } else {
             ''
         }
-
         #Write custom object
         $SPInfo = [PSCustomObject]@{ 
             Id = $item.Id
@@ -653,7 +668,9 @@ function Invoke-CheckManagedIdentities {
             AppId = $item.AppId
             ServicePrincipalType = $item.servicePrincipalType
             GroupMembership = ($GroupMember | Measure-Object).count
-            EntraRoles = ($AppEntraRoles | Measure-Object).count
+            EntraRolesDirect = $EntraRolesDirect
+            EntraRolesEffective = $EntraRolesEffective
+            EntraRoles = $EntraRolesEffective
             EntraMaxTier = $EntraMaxTier
             PermissionCount = ($AppAssignments | Measure-Object).count
             GroupOwnership = ($OwnedGroups | Measure-Object).count
@@ -668,7 +685,9 @@ function Invoke-CheckManagedIdentities {
             MiPath = $MiPath
             CreationDate = $item.createdDateTime
             CreationInDays = $CreationInDays
-            AzureRoles = $AzureRoleCount
+            AzureRolesDirect = $AzureRolesDirect
+            AzureRolesEffective = $AzureRolesEffective
+            AzureRoles = $AzureRolesEffective
             AzureMaxTier = $AzureMaxTier
             AzureRoleDetails = $AzureRoleDetails
             OwnerSPDetails = $OwnerSPDetails
