@@ -25,10 +25,174 @@ function Export-Summary {
         }
     
 return @"
-<h2>$Title</h2>
-<div class='chart-grid'>
-    $charts
+<section class='summary-chart-panel'>
+    <div class='summary-chart-panel-header'>
+        <h2>$Title</h2>
+        <div class='summary-chart-panel-meta'>$ChartCount charts</div>
+    </div>
+    <div class='chart-grid'>
+        $charts
+    </div>
+</section>
+"@
+    }
+
+    function New-KpiSection {
+        param (
+            $Items
+        )
+
+        $cards = ""
+        foreach ($entry in $Items.GetEnumerator()) {
+            $cards += @"
+<div class='summary-kpi-card'>
+    <div class='summary-kpi-label'>$($entry.Key)</div>
+    <div class='summary-kpi-value'>$($entry.Value)</div>
 </div>
+"@
+        }
+
+return @"
+<section class='summary-kpi-panel'>
+    <div class='summary-kpi-panel-header'>
+        <h2>Enumeration Summary</h2>
+        <div class='summary-chart-panel-meta'>$($Items.Count) categories</div>
+    </div>
+    <div class='summary-kpi-grid'>
+        $cards
+    </div>
+</section>
+"@
+    }
+
+    function ConvertTo-SummaryHtmlText {
+        param($Value)
+        return [System.Net.WebUtility]::HtmlEncode([string]$Value)
+    }
+
+    function New-GeneralField {
+        param(
+            [string]$Label,
+            [string]$ValueHtml
+        )
+
+return @"
+<div class='summary-info-row'>
+    <div class='summary-info-label'>$(ConvertTo-SummaryHtmlText $Label)</div>
+    <div class='summary-info-value'>$ValueHtml</div>
+</div>
+"@
+    }
+
+    function New-GeneralStatusBadge {
+        param(
+            [string]$Text,
+            [string]$Tone = "neutral"
+        )
+
+        $safeText = ConvertTo-SummaryHtmlText $Text
+        return "<span class='summary-status-badge tone-$Tone'>$safeText</span>"
+    }
+
+    function New-GeneralCard {
+        param(
+            [string]$Title,
+            [string[]]$Rows
+        )
+
+        $rowsHtml = @($Rows) -join "`n"
+return @"
+<section class='summary-info-card'>
+    <h3>$(ConvertTo-SummaryHtmlText $Title)</h3>
+    <div class='summary-info-list'>
+        $rowsHtml
+    </div>
+</section>
+"@
+    }
+
+    function Get-DurationDisplay {
+        param(
+            [string]$Start,
+            [string]$End
+        )
+
+        if ([string]::IsNullOrWhiteSpace($Start) -or [string]::IsNullOrWhiteSpace($End)) { return "Unknown" }
+
+        try {
+            $culture = [System.Globalization.CultureInfo]::InvariantCulture
+            $styles = [System.Globalization.DateTimeStyles]::AssumeLocal
+            $startTime = [datetime]::ParseExact($Start, "yyyyMMdd HH:mm", $culture, $styles)
+            $endTime = [datetime]::ParseExact($End, "yyyyMMdd HH:mm", $culture, $styles)
+            $duration = $endTime - $startTime
+            if ($duration.TotalMinutes -lt 0) { return "Unknown" }
+
+            if ($duration.TotalMinutes -lt 60) {
+                return "{0} min" -f [int][math]::Round($duration.TotalMinutes)
+            }
+
+            $parts = @()
+            if ($duration.Days -gt 0) { $parts += "{0}d" -f $duration.Days }
+            if ($duration.Hours -gt 0) { $parts += "{0}h" -f $duration.Hours }
+            if ($duration.Minutes -gt 0 -or $parts.Count -eq 0) { $parts += "{0}m" -f $duration.Minutes }
+            return ($parts -join " ")
+        } catch {
+            return "Unknown"
+        }
+    }
+
+    function New-GeneralSection {
+        param(
+            [string]$TenantName,
+            [string]$TenantId,
+            [string]$TenantLicense,
+            [string]$Subscriptions,
+            [string]$StartTime,
+            [string]$EndTime,
+            [string]$Duration,
+            [string]$EntraFalconVersion,
+            [string]$PowerShellVersion,
+            [string]$UserAgent,
+            [string]$AzureIamBadge,
+            [string]$PimRolesBadge,
+            [string]$PimGroupsBadge,
+            [string]$DefaultMsSpBadge
+        )
+
+        $tenantRows = @(
+            (New-GeneralField -Label "Tenant Name" -ValueHtml (ConvertTo-SummaryHtmlText $TenantName)),
+            (New-GeneralField -Label "Tenant ID" -ValueHtml (ConvertTo-SummaryHtmlText $TenantId)),
+            (New-GeneralField -Label "License" -ValueHtml (ConvertTo-SummaryHtmlText $TenantLicense)),
+            (New-GeneralField -Label "Subscriptions" -ValueHtml (ConvertTo-SummaryHtmlText $Subscriptions))
+        )
+
+        $executionRows = @(
+            (New-GeneralField -Label "Start Time" -ValueHtml (ConvertTo-SummaryHtmlText $StartTime)),
+            (New-GeneralField -Label "End Time" -ValueHtml (ConvertTo-SummaryHtmlText $EndTime)),
+            (New-GeneralField -Label "Duration" -ValueHtml (ConvertTo-SummaryHtmlText $Duration)),
+            (New-GeneralField -Label "EntraFalcon Version" -ValueHtml (ConvertTo-SummaryHtmlText $EntraFalconVersion)),
+            (New-GeneralField -Label "PowerShell Version" -ValueHtml (ConvertTo-SummaryHtmlText $PowerShellVersion)),
+            (New-GeneralField -Label "UserAgent" -ValueHtml (ConvertTo-SummaryHtmlText $UserAgent))
+        )
+
+        $scopeRows = @(
+            (New-GeneralField -Label "Azure IAM Data" -ValueHtml $AzureIamBadge),
+            (New-GeneralField -Label "PIM Role Data" -ValueHtml $PimRolesBadge),
+            (New-GeneralField -Label "PIM Group Data" -ValueHtml $PimGroupsBadge),
+            (New-GeneralField -Label "Default Microsoft SP Data" -ValueHtml $DefaultMsSpBadge)
+        )
+
+return @"
+<section class='summary-panel summary-general-panel'>
+    <div class='summary-general-header'>
+        <h2>General</h2>
+    </div>
+    <div class='summary-general-grid'>
+        $(New-GeneralCard -Title "Tenant" -Rows $tenantRows)
+        $(New-GeneralCard -Title "Execution" -Rows $executionRows)
+        $(New-GeneralCard -Title "Coverage" -Rows $scopeRows)
+    </div>
+</section>
 "@
     }
 
@@ -39,25 +203,7 @@ return @"
 
     $chartJsEmbedded = $global:GLOBALJavaScript_Chart
 
-    $mainTable = [pscustomobject]@{ 
-            "Users"                       = $($GlobalAuditSummary.Users.Count)
-            "Groups"                      = $($GlobalAuditSummary.Groups.Count)
-            "App Registrations"           = $($GlobalAuditSummary.AppRegistrations.Count)
-            "Enterprise Applications"     = $($GlobalAuditSummary.EnterpriseApps.Count)
-            "Managed Identities"          = $($GlobalAuditSummary.ManagedIdentities.Count)
-            "Administrative Units"        = $($GlobalAuditSummary.AdministrativeUnits.Count)
-            "Conditional Access Policies" = $($GlobalAuditSummary.ConditionalAccess.Count)
-            "Entra Role Assignments"      = $($GlobalAuditSummary.EntraRoleAssignments.Count)
-            "Azure Role Assignments"      = $($GlobalAuditSummary.AzureRoleAssignments.Count)
-            "PIM Settings"                = $($GlobalAuditSummary.PimSettings.Count)
-        }
-
-    $mainTableJson  = $mainTable | ConvertTo-Json -Depth 10 -Compress
-
     write-host "[*] Writing log files"
-
-
-    $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
     $GlobalAuditSummary.Time.End = Get-Date -Format "yyyyMMdd HH:mm"
 
@@ -86,24 +232,59 @@ return @"
         $securityFindingsSummary.Vulnerable, $securityFindingsSummary.NotVulnerable, $securityFindingsSummary.Skipped
     $hostOs = Get-EntraFalconHostOs
     $powerShellDisplay = "V$($PSVersionTable.PSVersion.ToString()) ($hostOs)"
+    $durationDisplay = Get-DurationDisplay -Start $GlobalAuditSummary.Time.Start -End $GlobalAuditSummary.Time.End
 
-    #Define header HTML
-    $headerHTML = [pscustomobject]@{ 
-        "Tenant Name"                           = $($GlobalAuditSummary.Tenant.Name)
-        "Tenant ID"                             = $($GlobalAuditSummary.Tenant.ID)
-        "Tenant License"                        = $($GlobalAuditSummary.TenantLicense.Name)
-        "Subscriptions"                         = $SubscriptionCount
-        "Start Time"                            = $($GlobalAuditSummary.Time.Start)
-        "End Time"                              = $($GlobalAuditSummary.Time.End)
-        "EntraFalcon Version"                   = $($GlobalAuditSummary.EntraFalcon.Version)
-        "PowerShell Version"                    = $powerShellDisplay
-        "UserAgent"                             = $($GlobalAuditSummary.UserAgent.Name)
-        "Enumerate Azure IAM"                   = $GLOBALAzurePsChecks
-        "Enumerate PIM for Entra/Azure Roles"   = $GLOBALGraphExtendedChecks
-        "Enumerate PIM for Groups"              = $GLOBALPimForGroupsChecked
-        "Enumerate Default Microsoft SP"        = $MsAppsEnumerated
-        "Security Findings (V/NV/Skipped)"      = $findingsStatusLine
+    $azureIamBadge = if ([bool]$GLOBALAzurePsChecks) {
+        New-GeneralStatusBadge -Text "Collected" -Tone "success"
+    } else {
+        New-GeneralStatusBadge -Text "Not Collected" -Tone "neutral"
     }
+    $pimRolesBadge = if ([bool]$GLOBALGraphExtendedChecks) {
+        New-GeneralStatusBadge -Text "Collected" -Tone "success"
+    } else {
+        New-GeneralStatusBadge -Text "Not Collected" -Tone "neutral"
+    }
+    $pimGroupsBadge = if ([bool]$GLOBALPimForGroupsChecked) {
+        New-GeneralStatusBadge -Text "Collected" -Tone "success"
+    } else {
+        New-GeneralStatusBadge -Text "Not Collected" -Tone "neutral"
+    }
+    $defaultMsSpBadge = if ([bool]$GlobalAuditSummary.EnterpriseApps.IncludeMsApps) {
+        New-GeneralStatusBadge -Text "Collected" -Tone "success"
+    } else {
+        New-GeneralStatusBadge -Text "Not Collected (default)" -Tone "muted"
+    }
+
+    $generalSectionHtml = New-GeneralSection `
+        -TenantName $GlobalAuditSummary.Tenant.Name `
+        -TenantId $GlobalAuditSummary.Tenant.ID `
+        -TenantLicense $GlobalAuditSummary.TenantLicense.Name `
+        -Subscriptions $SubscriptionCount `
+        -StartTime $GlobalAuditSummary.Time.Start `
+        -EndTime $GlobalAuditSummary.Time.End `
+        -Duration $durationDisplay `
+        -EntraFalconVersion $GlobalAuditSummary.EntraFalcon.Version `
+        -PowerShellVersion $powerShellDisplay `
+        -UserAgent $GlobalAuditSummary.UserAgent.Name `
+        -AzureIamBadge $azureIamBadge `
+        -PimRolesBadge $pimRolesBadge `
+        -PimGroupsBadge $pimGroupsBadge `
+        -DefaultMsSpBadge $defaultMsSpBadge
+
+    $mainTable = [ordered]@{
+            "Users"                       = $($GlobalAuditSummary.Users.Count)
+            "Groups"                      = $($GlobalAuditSummary.Groups.Count)
+            "Entra Role Assignments"      = $($GlobalAuditSummary.EntraRoleAssignments.Count)
+            "Azure Role Assignments"      = $($GlobalAuditSummary.AzureRoleAssignments.Count)
+            "App Registrations"           = $($GlobalAuditSummary.AppRegistrations.Count)
+            "Enterprise Applications"     = $($GlobalAuditSummary.EnterpriseApps.Count)
+            "Managed Identities"          = $($GlobalAuditSummary.ManagedIdentities.Count)
+            "Administrative Units"        = $($GlobalAuditSummary.AdministrativeUnits.Count)
+            "Conditional Access Policies" = $($GlobalAuditSummary.ConditionalAccess.Count)
+            "PIM Settings"                = $($GlobalAuditSummary.PimSettings.Count)
+            "Findings"                    = $securityFindingsSummary.Vulnerable
+        }
+    $mainTableJson  = $mainTable | ConvertTo-Json -Depth 10 -Compress
 
 
     # Generate chart sections
@@ -136,6 +317,16 @@ return @"
     if ($($GlobalAuditSummary.AzureRoleAssignments.Count) -ge 1) {
         $Chartsection += $ChartsectionAzureRoles
     }
+
+    $kpiSectionHtml = New-KpiSection -Items $mainTable
+    $mainTableRuntimeHtml = @"
+<div class='summary-hidden-runtime' aria-hidden='true'>
+$GLOBALMainTableDetailsHEAD
+$mainTableJson
+</script>
+<div id='object-container'></div>
+</div>
+"@
 
     $Chartsection += "<script type='text/javascript'>`n$chartJsEmbedded`n</script>"
 
@@ -293,6 +484,33 @@ document.addEventListener('DOMContentLoaded', function () {
     const chartColorPalette = ['#4CAF50', '#FF7043', '#29B6F6', '#FFCA28', '#AB47BC', '#26A69A', '#EC407A'];
     const chartInstances = [];
 
+    function getDatasetColors(datasetKey, labels) {
+        const labelList = Array.isArray(labels) ? labels : [];
+        return labelList.map(function (_, idx) {
+            return chartColorPalette[idx % chartColorPalette.length];
+        });
+    }
+
+    function getDatasetTotal(chartData) {
+        if (!chartData || !Array.isArray(chartData.datasets)) {
+            return 0;
+        }
+
+        return chartData.datasets.reduce(function (datasetSum, dataset) {
+            const values = Array.isArray(dataset.data) ? dataset.data : [];
+            const numericValues = values.map(function (value) {
+                return Number(value) || 0;
+            });
+            return datasetSum + numericValues.reduce(function (sum, value) {
+                return sum + value;
+            }, 0);
+        }, 0);
+    }
+
+    function hasRenderableChartData(chartData) {
+        return getDatasetTotal(chartData) > 0;
+    }
+
     function getChartData(datasetKey) {
 
         // ============ USERS ============
@@ -326,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (datasetKey === 'users_mfacap') {
             return {
-                labels: ['MFA Capable Users', 'Not MFA Capable Users'],
+                labels: ['MFA Capable', 'Not MFA Capable'],
                 datasets: [{
                     data: [dataSources.users_mfacap.mfacap, dataSources.users_mfacap.notmfacap],
                     backgroundColor: chartColorPalette
@@ -385,7 +603,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (datasetKey === 'groups_pimonboarded') {
             return {
-                labels: ['Not PIM Onboarded Groups', 'PIM Onboarded Groups'],
+                labels: ['Not PIM Onboarded', 'PIM Onboarded'],
                 datasets: [{
                     data: [dataSources.groups_pimonboarded.notonboarded, dataSources.groups_pimonboarded.onboarded],
                     backgroundColor: chartColorPalette
@@ -560,10 +778,96 @@ document.addEventListener('DOMContentLoaded', function () {
         const gridColor = isDarkMode ? '#444' : '#ccc';
         const titleColor = isDarkMode ? '#ccc' : '#222';
         const labelColor = isDarkMode ? '#eee' : '#111';
+        const chartData = getChartData(datasetKey);
+        const hasData = hasRenderableChartData(chartData);
 
-        const plugins = [];
+        if (chartData && Array.isArray(chartData.datasets)) {
+            chartData.datasets.forEach(function (dataset) {
+                dataset.backgroundColor = getDatasetColors(datasetKey, chartData.labels);
+                if (!hasData) {
+                    dataset.backgroundColor = 'rgba(0,0,0,0)';
+                    dataset.borderColor = 'rgba(0,0,0,0)';
+                    dataset.hoverBackgroundColor = 'rgba(0,0,0,0)';
+                    dataset.hoverBorderColor = 'rgba(0,0,0,0)';
+                    dataset.borderWidth = 0;
+                }
+            });
+        }
 
-        if (type === 'doughnut') {
+        const plugins = [{
+            id: 'emptyState',
+            afterDraw: (chart) => {
+                if (hasData) {
+                    return;
+                }
+
+                const { ctx, chartArea } = chart;
+                if (!chartArea) {
+                    return;
+                }
+
+                ctx.save();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = isDarkMode ? '#bbbbbb' : '#666666';
+                ctx.font = '600 14px Arial';
+                ctx.fillText('No data available', (chartArea.left + chartArea.right) / 2, (chartArea.top + chartArea.bottom) / 2);
+                ctx.restore();
+            }
+        }];
+
+        if (type === 'bar') {
+            plugins.push({
+                id: 'barValueLabels',
+                afterDatasetsDraw: (chart) => {
+                    if (!hasData) {
+                        return;
+                    }
+
+                    const { ctx, chartArea } = chart;
+                    const isHorizontal = chart.options.indexAxis === 'y';
+
+                    ctx.save();
+                    ctx.fillStyle = labelColor;
+                    ctx.font = '600 11px Arial';
+
+                    chart.data.datasets.forEach((dataset, datasetIndex) => {
+                        const meta = chart.getDatasetMeta(datasetIndex);
+                        if (meta.hidden) {
+                            return;
+                        }
+
+                        meta.data.forEach((element, index) => {
+                            const value = Number(dataset.data[index]) || 0;
+                            if (value <= 0) {
+                                return;
+                            }
+
+                            const position = element.tooltipPosition();
+                            let x;
+                            let y;
+
+                            if (isHorizontal) {
+                                x = Math.min(position.x + 8, chartArea.right - 4);
+                                y = position.y;
+                                ctx.textAlign = x >= chartArea.right - 10 ? 'right' : 'left';
+                            } else {
+                                x = position.x;
+                                y = Math.max(position.y - 10, chartArea.top + 12);
+                                ctx.textAlign = 'center';
+                            }
+
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(String(value), x, y);
+                        });
+                    });
+
+                    ctx.restore();
+                }
+            });
+        }
+
+        if (type === 'doughnut' && hasData) {
             plugins.push({
                 id: 'centerText',
                 beforeDraw: (chart) => {
@@ -583,7 +887,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         return {
             type,
-            data: getChartData(datasetKey),
+            data: chartData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -591,7 +895,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 indexAxis: indexAxis,
                 plugins: {
                     legend: {
-                        display: showLegend,
+                        display: hasData && showLegend,
                         position: 'top',
                         labels: { color: axisColor }
                     },
@@ -599,15 +903,18 @@ document.addEventListener('DOMContentLoaded', function () {
                         display: true,
                         text: titleText,
                         color: titleColor,
-                        font: { size: 16 }
+                        font: { size: 16 },
+                        padding: { bottom: 14 }
                     }
                 },
                 scales: type === 'bar' ? {
                     x: {
+                        display: hasData,
                         ticks: { color: axisColor },
                         grid: { color: gridColor }
                     },
                     y: {
+                        display: hasData,
                         ticks: { color: axisColor },
                         grid: { color: gridColor }
                     }
@@ -620,43 +927,43 @@ document.addEventListener('DOMContentLoaded', function () {
     // === 3. Chart layout/config ===
     const chartConfigs = [
         // ============ Users ============
-        { id: 'user_chart1', title: 'Users vs Guests', type: 'doughnut', dataset: 'users_general' },
-        { id: 'user_chart2', title: 'Enabled vs Disabled Users', type: 'bar', dataset: 'users_enabled', showLegend: false },
-        { id: 'user_chart3', title: 'MFA Capable vs Not Capable Users', type: 'bar', dataset: 'users_mfacap', showLegend: false },
-        { id: 'user_chart4', title: 'Cloud-Only vs Synced Users', type: 'bar', dataset: 'users_onprem', showLegend: false },
-        { id: 'user_chart5', title: 'Active vs Inactive Users', type: 'bar', dataset: 'users_inactive', showLegend: false },
-        { id: 'user_chart6', title: 'Last Successful Sign-In', type: 'bar', dataset: 'users_lastsignin',indexAxis: 'y', showLegend: false },
+        { id: 'user_chart1', title: 'Internal vs Guest Users', type: 'doughnut', dataset: 'users_general' },
+        { id: 'user_chart2', title: 'Enabled vs Disabled', type: 'bar', dataset: 'users_enabled', showLegend: false },
+        { id: 'user_chart3', title: 'MFA Capability', type: 'bar', dataset: 'users_mfacap', showLegend: false },
+        { id: 'user_chart4', title: 'Cloud-Only vs Synced', type: 'bar', dataset: 'users_onprem', showLegend: false },
+        { id: 'user_chart5', title: 'Active vs Inactive', type: 'bar', dataset: 'users_inactive', showLegend: false },
+        { id: 'user_chart6', title: 'Last Successful Sign-In', type: 'bar', dataset: 'users_lastsignin', indexAxis: 'y', showLegend: false },
         
         // ============ Groups ============
-        { id: 'group_chart1', title: 'Security vs M365 Groups', type: 'doughnut', dataset: 'groups_general' },
-        { id: 'group_chart2', title: 'Cloud-Only vs Synced Groups', type: 'bar', dataset: 'groups_onprem', showLegend: false },
-        { id: 'group_chart3', title: 'Private vs Public M365 Groups', type: 'bar', dataset: 'groups_public', showLegend: false },
-        { id: 'group_chart4', title: 'PIM-Onboarded Groups', type: 'bar', dataset: 'groups_pimonboarded', showLegend: false },
+        { id: 'group_chart1', title: 'Security vs M365', type: 'doughnut', dataset: 'groups_general' },
+        { id: 'group_chart2', title: 'Cloud-Only vs Synced', type: 'bar', dataset: 'groups_onprem', showLegend: false },
+        { id: 'group_chart3', title: 'Private vs Public M365', type: 'bar', dataset: 'groups_public', showLegend: false },
+        { id: 'group_chart4', title: 'PIM Onboarding', type: 'bar', dataset: 'groups_pimonboarded', showLegend: false },
 
         // ============ Enterprise Apps ============
-        { id: 'enterpriseapps_chart1', title: 'Internal vs Foreign Apps', type: 'doughnut', dataset: 'enterpriseapps_general' },
-        { id: 'enterpriseapps_chart2', title: 'Apps without Credentials vs Apps with Credentials', type: 'bar', dataset: 'enterpriseapps_credentials', showLegend: false },
-        { id: 'enterpriseapps_chart3', title: 'Apps by API Permission Severity', type: 'bar', dataset: 'enterpriseapps_apicategorization',indexAxis: 'y', showLegend: false },
+        { id: 'enterpriseapps_chart1', title: 'Internal vs Foreign', type: 'doughnut', dataset: 'enterpriseapps_general' },
+        { id: 'enterpriseapps_chart2', title: 'Credential Presence', type: 'bar', dataset: 'enterpriseapps_credentials', showLegend: false },
+        { id: 'enterpriseapps_chart3', title: 'API Permission Severity', type: 'bar', dataset: 'enterpriseapps_apicategorization', indexAxis: 'y', showLegend: false },
 
         // ============ App Registrations ============
-        { id: 'appregistrations_chart1', title: 'Apps Audience', type: 'doughnut', dataset: 'appregistrations_general' },
-        { id: 'appregistrations_chart2', title: 'Apps with vs without AppLock', type: 'bar', dataset: 'appregistrations_applock', showLegend: false },
-        { id: 'appregistrations_chart3', title: 'Apps with Credentials', type: 'bar', dataset: 'appregistrations_credentials',indexAxis: 'y', showLegend: false },
+        { id: 'appregistrations_chart1', title: 'Tenant Audience', type: 'doughnut', dataset: 'appregistrations_general' },
+        { id: 'appregistrations_chart2', title: 'AppLock Coverage', type: 'bar', dataset: 'appregistrations_applock', showLegend: false },
+        { id: 'appregistrations_chart3', title: 'Credential Types', type: 'bar', dataset: 'appregistrations_credentials', indexAxis: 'y', showLegend: false },
 
         // ============ Managed Identities  ============
-        { id: 'managedidentities_chart1', title: 'System-Assigned vs User-Assigned MI', type: 'doughnut', dataset: 'managedidentities_general' },
-        { id: 'managedidentities_chart2', title: 'MI by API Permission Severity', type: 'bar', dataset: 'managedidentities_apicategorization',indexAxis: 'y', showLegend: false },
+        { id: 'managedidentities_chart1', title: 'System vs User Assigned', type: 'doughnut', dataset: 'managedidentities_general' },
+        { id: 'managedidentities_chart2', title: 'API Permission Severity', type: 'bar', dataset: 'managedidentities_apicategorization', indexAxis: 'y', showLegend: false },
 
         // ============ Entra Roles ============
-        { id: 'entraroles_chart1', title: 'Eligible vs Active Role Assignments', type: 'doughnut', dataset: 'entraroles_general' },
-        { id: 'entraroles_chart2', title: 'Built-In vs Custom Role Assignments', type: 'bar', dataset: 'entraroles_builtin', showLegend: false },
-        { id: 'entraroles_chart3', title: 'Assignments per Role Tier-Level', type: 'bar', dataset: 'entraroles_tiers',indexAxis: 'y', showLegend: false },
-        { id: 'entraroles_chart4', title: 'Assignments per Principal Type', type: 'bar', dataset: 'entraroles_principaltypes',indexAxis: 'y', showLegend: false },
+        { id: 'entraroles_chart1', title: 'Eligible vs Active', type: 'doughnut', dataset: 'entraroles_general' },
+        { id: 'entraroles_chart2', title: 'Built-In vs Custom', type: 'bar', dataset: 'entraroles_builtin', showLegend: false },
+        { id: 'entraroles_chart3', title: 'Role Tier Distribution', type: 'bar', dataset: 'entraroles_tiers', indexAxis: 'y', showLegend: false },
+        { id: 'entraroles_chart4', title: 'Principal Types', type: 'bar', dataset: 'entraroles_principaltypes', indexAxis: 'y', showLegend: false },
 
         // ============ Azure Roles ============
-        { id: 'azureroles_chart1', title: 'Eligible vs Active Role Assignments', type: 'doughnut', dataset: 'azureroles_general' },
-        { id: 'azureroles_chart2', title: 'Built-In vs Custom Role Assignments', type: 'bar', dataset: 'azureroles_builtin', showLegend: false },
-        { id: 'azureroles_chart3', title: 'Assignments per Principal Type', type: 'bar', dataset: 'azureroles_principaltypes',indexAxis: 'y', showLegend: false }
+        { id: 'azureroles_chart1', title: 'Eligible vs Active', type: 'doughnut', dataset: 'azureroles_general' },
+        { id: 'azureroles_chart2', title: 'Built-In vs Custom', type: 'bar', dataset: 'azureroles_builtin', showLegend: false },
+        { id: 'azureroles_chart3', title: 'Principal Types', type: 'bar', dataset: 'azureroles_principaltypes', indexAxis: 'y', showLegend: false }
     ];
 
     // === 4. Render all charts ===
@@ -689,15 +996,195 @@ $CustomCss = @"
 <style>
 .chart-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
-    max-width: 1100px;
-    margin-bottom: 30px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    max-width: none;
+    margin-bottom: 0;
 }
 .chart-box {
     width: 100%;
-    max-width: 500px;
-    height: 250px;
+    max-width: none;
+    height: 270px;
+    padding: 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(0,0,0,0.08);
+    background: rgba(255,255,255,0.56);
+}
+body.dark-mode .chart-box {
+    border-color: rgba(255,255,255,0.10);
+    background: rgba(255,255,255,0.03);
+}
+.summary-panel,
+.summary-kpi-panel,
+.summary-chart-panel {
+    padding: 16px;
+    margin-bottom: 18px;
+    border-radius: 16px;
+    border: 1px solid rgba(0,0,0,0.10);
+    background: rgba(255,255,255,0.78);
+    box-shadow: 0 8px 20px rgba(17, 26, 43, 0.06);
+}
+body.dark-mode .summary-panel,
+body.dark-mode .summary-kpi-panel,
+body.dark-mode .summary-chart-panel {
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+}
+.summary-panel h2,
+.summary-kpi-panel h2,
+.summary-chart-panel h2 {
+    margin-top: 0;
+}
+.summary-general-header {
+    display: flex;
+    align-items: baseline;
+    margin-bottom: 16px;
+}
+.summary-general-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 14px;
+}
+.summary-info-card {
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(0,0,0,0.10);
+    background: rgba(255,255,255,0.78);
+}
+body.dark-mode .summary-info-card {
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+}
+.summary-info-card h3 {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+}
+.summary-info-list {
+    display: grid;
+    gap: 10px;
+}
+.summary-info-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.9fr) minmax(0, 1.2fr);
+    gap: 10px;
+    align-items: start;
+}
+.summary-info-label {
+    font-size: 12px;
+    opacity: 0.72;
+}
+.summary-info-value {
+    font-size: 13px;
+    line-height: 1.45;
+    word-break: break-word;
+}
+.summary-status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(0,0,0,0.10);
+    font-size: 12px;
+    line-height: 1.2;
+}
+.summary-status-badge.tone-success {
+    background: rgba(91, 140, 90, 0.16);
+    color: #2f6a34;
+    border-color: rgba(47, 106, 52, 0.20);
+}
+.summary-status-badge.tone-neutral {
+    background: rgba(79, 129, 189, 0.12);
+    color: #2e567f;
+    border-color: rgba(46, 86, 127, 0.18);
+}
+.summary-status-badge.tone-muted {
+    background: rgba(120,120,120,0.12);
+    color: #5f5f5f;
+    border-color: rgba(95,95,95,0.18);
+}
+body.dark-mode .summary-status-badge {
+    border-color: rgba(255,255,255,0.12);
+}
+body.dark-mode .summary-status-badge.tone-success {
+    background: rgba(110, 168, 110, 0.16);
+    color: #cfe8cf;
+    border-color: rgba(180, 220, 180, 0.18);
+}
+body.dark-mode .summary-status-badge.tone-neutral {
+    background: rgba(120, 165, 214, 0.16);
+    color: #d6e7f8;
+    border-color: rgba(173, 205, 238, 0.18);
+}
+body.dark-mode .summary-status-badge.tone-muted {
+    background: rgba(170,170,170,0.10);
+    color: #dddddd;
+    border-color: rgba(210,210,210,0.16);
+}
+.summary-chart-panel-header,
+.summary-kpi-panel-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.summary-chart-panel-meta {
+    font-size: 12px;
+    opacity: 0.72;
+}
+.summary-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+.summary-kpi-card {
+    display: grid;
+    grid-template-rows: minmax(32px, auto) auto;
+    gap: 8px;
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(0,0,0,0.10);
+    background: rgba(255,255,255,0.78);
+}
+body.dark-mode .summary-kpi-card {
+    border-color: rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+}
+.summary-kpi-label {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.72;
+    line-height: 1.4;
+    min-height: 32px;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+.summary-kpi-value {
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+}
+.summary-hidden-runtime {
+    display: none !important;
+}
+@media (max-width: 720px) {
+    .chart-grid {
+        grid-template-columns: 1fr;
+    }
+    .summary-chart-panel-header,
+    .summary-kpi-panel-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .summary-info-row {
+        grid-template-columns: 1fr;
+        gap: 4px;
+    }
 }
 </style>
 "@
@@ -739,12 +1226,12 @@ Enumeration Results:
     Set-GlobalReportManifest -CurrentReportKey 'Summary' -CurrentReportName 'EntraFalcon Enumeration Summary'
 
     # Build header section
-    $headerHTML = $headerHTML | ConvertTo-Html -Fragment -PreContent "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div><h2>General</h2>" -As List -PostContent "<h2>Enumerated Objects</h2>"
+    $headerHTML = "<div id=`"loadingOverlay`"><div class=`"spinner`"></div><div class=`"loading-text`">Loading data...</div></div>$generalSectionHtml"
   
     #Write HTML
     $PostContentCombined =  $Chartsection + "`n" + $GLOBALJavaScript
     $CssCombined = $GLOBALcss + $CustomCss + $global:GLOBALReportManifestScript
-    $Report = ConvertTo-HTML -Body "$headerHTML $mainTableHTML" -Title "$Title" -Head $CssCombined -PostContent $PostContentCombined
+    $Report = ConvertTo-HTML -Body "$headerHTML $kpiSectionHtml $mainTableRuntimeHtml" -Title "$Title" -Head $CssCombined -PostContent $PostContentCombined
     $summaryHtmlPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
     $summaryTxtPath = "$outputFolder\_EntraFalconEnumerationSummary_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt"
     $Report | Out-File $summaryHtmlPath
