@@ -165,6 +165,15 @@ function Invoke-CheckAppRegistrations {
     }
     $AppRegistrations = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/applications' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
     $AppsTotalCount = $($AppRegistrations.count)
+
+    # Filter out Agent Identitiey Blueprints
+    $AppRegistrations = @($AppRegistrations | Where-Object {$_.'@odata.type' -ne '#microsoft.graph.agentIdentityBlueprint'})
+    $AgentIdentityBlueprintCount = $AppsTotalCount - $($AppRegistrations).count
+    if ($AgentIdentityBlueprintCount -gt 0) {
+        $AppsTotalCount = $($AppRegistrations.count)
+        Write-Log -Level Verbose -Message "Filtered out $AgentIdentityBlueprintCount agent identity blueprints from App Registrations."
+    }
+    
     write-host "[+] Got $AppsTotalCount App registrations"
 
     #Abort if no apps are present
@@ -1028,7 +1037,7 @@ Appendix: Experimental App Authentication Settings
 "
 
     # Set generic information which get injected into the HTML
-    Set-GlobalReportManifest -CurrentReportKey 'AR' -CurrentReportName 'ManagedIdentities Enumeration' -Warnings $ScriptWarningList
+    Set-GlobalReportManifest -CurrentReportKey 'AR' -CurrentReportName 'App Registrations Enumeration' -Warnings $ScriptWarningList
 
     # HTML header below the navbar
 $headerHtml = @"

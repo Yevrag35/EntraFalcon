@@ -74,9 +74,8 @@ function Invoke-CheckEnterpriseApps {
         '$select' = "Id,DisplayName,PublisherName,accountEnabled,AppRoles,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,PasswordCredentials,KeyCredentials,AppRoleAssignmentRequired,preferredSingleSignOnMode"
         '$top' = $ApiTop
     }
-    $EnterpriseApps = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
+    $EnterpriseApps = @(Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri '/servicePrincipals' -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name))
 
-    
     $EnterpriseAppsCount = $($EnterpriseApps.count)
     write-host "[+] Got $EnterpriseAppsCount Enterprise Applications "
 
@@ -111,12 +110,20 @@ function Invoke-CheckEnterpriseApps {
 
     # Filter out MS enterprise apps
     if (!$IncludeMsApps) {
-        $EnterpriseApps = $EnterpriseApps | where-object {-not($GLOBALMsTenantIds -contains $_.AppOwnerOrganizationId) -and $_.DisplayName -ne "O365 LinkedIn Connection" -and $_.DisplayName -ne "P2P Server"} | select-object Id,DisplayName,accountEnabled,PublisherName,AppRoles,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,PasswordCredentials,KeyCredentials,AppRoleAssignmentRequired,preferredSingleSignOnMode
+        $EnterpriseApps = $EnterpriseApps | where-object {-not($GLOBALMsTenantIds -contains $_.AppOwnerOrganizationId) -and $_.DisplayName -ne "O365 LinkedIn Connection" -and $_.DisplayName -ne "P2P Server"} | select-object Id,'@odata.type',DisplayName,accountEnabled,PublisherName,AppRoles,AppId,servicePrincipalType,createdDateTime,signInAudience,AppOwnerOrganizationId,PasswordCredentials,KeyCredentials,AppRoleAssignmentRequired,preferredSingleSignOnMode
         $EnterpriseAppsCount = $($EnterpriseApps.count)
         write-host "[i] Filtered out Microsoft Applications. $EnterpriseAppsCount left (use -IncludeMsApps to include them)"
     } else {
         #Add information to the enumeration summary
         $GlobalAuditSummary.EnterpriseApps.IncludeMsApps = $true
+    }
+
+    # Filter out Agent Identitiey Blueprint Principals (Agent Identites are already excluded trough the filter "ServicePrincipalType eq 'Application'")
+    $EnterpriseApps = @($EnterpriseApps | Where-Object {$_.'@odata.type' -ne '#microsoft.graph.agentIdentityBlueprintPrincipal'})
+    $FilteredAgentIdentityBlueprintPrincipalsCount = $EnterpriseAppsCount - $EnterpriseApps.count
+        if ($FilteredAgentIdentityBlueprintPrincipalsCount -gt 0) {
+        $EnterpriseAppsCount = $($EnterpriseApps.count)
+        Write-Log -Level Verbose -Message "Filtered out $FilteredAgentIdentityBlueprintPrincipalsCount agent identity blueprint principals from Enterprise Apps."
     }
 
     #Abort if no apps are present
