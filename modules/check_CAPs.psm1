@@ -651,7 +651,8 @@ function Invoke-CheckCaps {
 
         ###################### Analyzing policies
 
-        $ExcludedObjects = $policy.Conditions.Users.ExcludeUsers.count + $policy.Conditions.Users.ExcludeGroups.count + $policy.Conditions.Users.ExcludeRoles.count + $ExcludedExternalUsersCount
+        $ExcludedUsersEffective = $policy.Conditions.Users.ExcludeUsers.count + $ExcUsersTroughGroups
+        $ExcludedNonUserTargets = $policy.Conditions.Users.ExcludeRoles.count + $ExcludedExternalUsersCount
         
         #Count condition types for policy complexity checks
         $SignInRiskCount = $policy.Conditions.SignInRiskLevels.count
@@ -709,8 +710,12 @@ function Invoke-CheckCaps {
                 $ErrorMessages += $MissingRolesWarning
                 $DeviceCodeFlowWarnings++            
             }
-            if ($ExcludedObjects -gt 0) {
-                $ErrorMessages += "has $ExcludedObjects excluded objects"
+            if ($ExcludedUsersEffective -ge 3) {
+                $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
+                $DeviceCodeFlowWarnings++
+            }
+            if ($ExcludedNonUserTargets -gt 0) {
+                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
                 $DeviceCodeFlowWarnings++
             }
             $additionalConditionTypes = $ConditionTypeCount - 1 # DeviceCode Flow is a condition by itself
@@ -754,8 +759,12 @@ function Invoke-CheckCaps {
                 $ErrorMessages += $MissingRolesWarning
                 $LegacyAuthWarnings++           
             }
-            if ($ExcludedObjects -ne 0) {
-                $ErrorMessages += "has $ExcludedObjects excluded objects"
+            if ($ExcludedUsersEffective -ge 3) {
+                $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
+                $LegacyAuthWarnings++
+            }
+            if ($ExcludedNonUserTargets -gt 0) {
+                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
                 $LegacyAuthWarnings++
             }
             $additionalConditionTypes = $ConditionTypeCount - 1 # ClientAppTypes are a condition by themself
@@ -796,8 +805,12 @@ function Invoke-CheckCaps {
                 $ErrorMessages += $MissingRolesWarning
                 $SignInRiskWarnings++            
             }
-            if ($ExcludedObjects -gt 0) {
-                $ErrorMessages += "has $ExcludedObjects excluded objects"
+            if ($ExcludedUsersEffective -ge 3) {
+                $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
+                $SignInRiskWarnings++
+            }
+            if ($ExcludedNonUserTargets -gt 0) {
+                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
                 $SignInRiskWarnings++
             }
             $additionalConditionTypes = $ConditionTypeCount - 1 # SignInRiskLevels is condition by itself
@@ -838,8 +851,12 @@ function Invoke-CheckCaps {
                 $ErrorMessages += $MissingRolesWarning
                 $UserRiskWarnings++          
             }
-            if ($ExcludedObjects -gt 0) {
-                $ErrorMessages += "has $ExcludedObjects excluded objects"
+            if ($ExcludedUsersEffective -ge 3) {
+                $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
+                $UserRiskWarnings++
+            }
+            if ($ExcludedNonUserTargets -gt 0) {
+                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
                 $UserRiskWarnings++
             }
             $additionalConditionTypes = $ConditionTypeCount - 1 # UserRiskLevels is condition by itself
@@ -882,8 +899,12 @@ function Invoke-CheckCaps {
                 $ErrorMessages += $MissingRolesWarning
                 $CombinedRiskWarnings++         
             }
-            if ($ExcludedObjects -gt 0) {
-                $ErrorMessages += "has $ExcludedObjects excluded objects"
+            if ($ExcludedUsersEffective -ge 3) {
+                $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
+                $CombinedRiskWarnings++
+            }
+            if ($ExcludedNonUserTargets -gt 0) {
+                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
                 $CombinedRiskWarnings++
             }
             $additionalConditionTypes = $ConditionTypeCount - 2 # UserRiskLevels and SignInRiskLevels are conditions by themself
@@ -912,8 +933,12 @@ function Invoke-CheckCaps {
                 $ErrorMessages += "is not enabled"
                 $RegisterSecInfosWarnings++
             }
-            if ($ExcludedObjects -gt 0) {
-                $ErrorMessages += "has $ExcludedObjects excluded objects"
+            if ($ExcludedUsersEffective -ge 3) {
+                $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
+                $RegisterSecInfosWarnings++
+            }
+            if ($ExcludedNonUserTargets -gt 0) {
+                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
                 $RegisterSecInfosWarnings++
             }
             if ($null -eq $IncludedUserCount -or $IncludedUserCount -ne "All") {
@@ -949,8 +974,12 @@ function Invoke-CheckCaps {
                 $ErrorMessages += "is not enabled"
                 $RegisterDevicesInfosWarnings++
             }
-            if ($ExcludedObjects -gt 0) {
-                $ErrorMessages += "has $ExcludedObjects excluded objects"
+            if ($ExcludedUsersEffective -ge 3) {
+                $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
+                $RegisterDevicesInfosWarnings++
+            }
+            if ($ExcludedNonUserTargets -gt 0) {
+                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
                 $RegisterDevicesInfosWarnings++
             }
             if ($null -eq $IncludedUserCount -or $IncludedUserCount -ne "All") {
@@ -998,8 +1027,12 @@ function Invoke-CheckCaps {
                 $ErrorMessages += $MissingRolesWarning
                 $UserMfaWarnings++
             }
-            if ($ExcludedObjects -gt 0) {
-                $ErrorMessages += "has $ExcludedObjects excluded objects"
+            if ($ExcludedUsersEffective -ge 3) {
+                $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
+                $UserMfaWarnings++
+            }
+            if ($ExcludedNonUserTargets -gt 0) {
+                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
                 $UserMfaWarnings++
             }
             if ($ConditionTypeCount -gt 0) {
@@ -1019,8 +1052,8 @@ function Invoke-CheckCaps {
 
         #Check policy with Authentication strengths for enforcing phishing-resistant MFA
         $authStrengthIdCandidate = "$($policy.GrantControls.AuthenticationStrength.Id)".Trim()
-        $hasNoAuthFlow = @($policy.Conditions.AuthenticationFlows.TransferMethods).Count -eq 0
-        $hasNoUserActions = @($policy.Conditions.Applications.IncludeUserActions).Count -eq 0
+        $hasNoAuthFlow = $null -eq $policy.Conditions.AuthenticationFlows.TransferMethods -or $policy.Conditions.AuthenticationFlows.TransferMethods.Count -eq 0
+        $hasNoUserActions = $null -eq $policy.Conditions.Applications.IncludeUserActions -or $policy.Conditions.Applications.IncludeUserActions.Count -eq 0
         if ($policy.Conditions.Applications.IncludeAuthenticationContextClassReferences.count -eq 0 -and -not [string]::IsNullOrWhiteSpace($authStrengthIdCandidate) -and $policy.Conditions.SignInRiskLevels.count -eq 0 -and $policy.Conditions.UserRiskLevels.count -eq 0 -and $hasNoAuthFlow -and $hasNoUserActions) {
             $PolicyAuthStrength = $true
             $AuthStrengthWarnings = 0
@@ -1034,8 +1067,12 @@ function Invoke-CheckCaps {
                 $ErrorMessages += "is not targeting all resources"
                 $AuthStrengthWarnings++
             }
-            if ($ExcludedObjects -gt 0) {
-                $ErrorMessages += "has $ExcludedObjects excluded objects"
+            if ($ExcludedUsersEffective -ge 3) {
+                $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
+                $AuthStrengthWarnings++
+            }
+            if ($ExcludedNonUserTargets -gt 0) {
+                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
                 $AuthStrengthWarnings++
             }
             if ($unmatchedRoleCounts.Count -ne 0) {
