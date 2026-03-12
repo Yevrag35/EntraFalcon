@@ -391,116 +391,117 @@ function Invoke-CheckPIM {
 
         #Check auth context related Caps
         if ($authCtxEnabled) {
-            $AuthContextIssues = @()
+            $AuthContextIssues = ""
+            $AuthContextIssueSummary = [System.Collections.Generic.List[string]]::new()
             
             # Process each matching policy
-            $LinkedCaps = $AllCaps.values | Where-Object { $_.AuthContextId -contains $claimValue } | ForEach-Object {
-                $policy = $_
-                $Issues = @()
+            $LinkedCaps = @(
+                $AllCaps.values | Where-Object { $_.AuthContextId -contains $claimValue } | ForEach-Object {
+                    $policy = $_
+                    $Issues = [System.Collections.Generic.List[string]]::new()
 
-                # Check if sign-in frequency is not set to everyTime
-                if ($policy.SignInFrequencyInterval -ne 'EveryTime' -or -not $policy.SignInFrequency) {
-                    $Issues += "sign-in frequency is not 'EveryTime'"
-                }
+                    # Check if sign-in frequency is not set to everyTime
+                    if ($policy.SignInFrequencyInterval -ne 'EveryTime' -or -not $policy.SignInFrequency) {
+                        $Issues.Add("sign-in frequency is not 'EveryTime'")
+                    }
 
-                # Check if policy is not enabled
-                if ($policy.State -ne 'enabled') {
-                    $Issues += "policy is not enabled"
-                }
+                    # Check if policy is not enabled
+                    if ($policy.State -ne 'enabled') {
+                        $Issues.Add("policy is not enabled")
+                    }
 
-                # Check if policy targets all users
-                if ($policy.IncUsers -ne 'All') {
-                    $Issues += "not target all users"
-                }
+                    # Check if policy targets all users
+                    if ($policy.IncUsers -ne 'All') {
+                        $Issues.Add("not target all users")
+                    }
 
-                # Check if policy excludes users
-                if ($policy.ExcUsers -gt 0) {
-                    $Issues += "excludes users"
-                }
+                    # Check if policy excludes users
+                    if ($policy.ExcUsers -gt 0) {
+                        $Issues.Add("excludes users")
+                    }
 
-                # Check if policy excludes groups
-                if ($policy.ExcGroups -gt 0) {
-                    $Issues += "excludes groups"
-                }
+                    # Check if policy excludes groups
+                    if ($policy.ExcGroups -gt 0) {
+                        $Issues.Add("excludes groups")
+                    }
 
-                # Check if policy excludes roles
-                if ($policy.ExcRoles -gt 0) {
-                    $Issues += "excludes roles"
-                }
+                    # Check if policy excludes roles
+                    if ($policy.ExcRoles -gt 0) {
+                        $Issues.Add("excludes roles")
+                    }
 
-                # Check if policy targets sign-in risks
-                if ($policy.SignInRisk -gt 0) {
-                    $Issues += "targets SinginRisk"
-                }
+                    # Check if policy targets sign-in risks
+                    if ($policy.SignInRisk -gt 0) {
+                        $Issues.Add("targets SinginRisk")
+                    }
 
-                # Check if policy targets user risks
-                if ($policy.UserRisk -gt 0) {
-                    $Issues += "targets UserRisk"
-                }
+                    # Check if policy targets user risks
+                    if ($policy.UserRisk -gt 0) {
+                        $Issues.Add("targets UserRisk")
+                    }
 
-                # Check if policy exclude platforms
-                if ($policy.ExcPlatforms -gt 0) {
-                    $Issues += "excludes platforms"
-                }
+                    # Check if policy exclude platforms
+                    if ($policy.ExcPlatforms -gt 0) {
+                        $Issues.Add("excludes platforms")
+                    }
 
-                # Check if policy includes specific platforms
-                if ($policy.IncPlatforms -gt 0 -and $policy.IncPlatforms -lt 6) {
-                    $Issues += "includes specific platforms"
-                }
-        
-                # Check if policy exclude networks
-                if ($policy.ExcNw -gt 1) {
-                    $Issues += "exclude networks"
-                }
+                    # Check if policy includes specific platforms
+                    if ($policy.IncPlatforms -gt 0 -and $policy.IncPlatforms -lt 6) {
+                        $Issues.Add("includes specific platforms")
+                    }
+            
+                    # Check if policy exclude networks
+                    if ($policy.ExcNw -gt 1) {
+                        $Issues.Add("exclude networks")
+                    }
 
-                # Check if policy targets specific networks
-                if ($policy.IncNw -gt 0 -and -not ($policy.IncNw -eq "All")) {
-                    $Issues += "targets specific networks"
-                }
+                    # Check if policy targets specific networks
+                    if ($policy.IncNw -gt 0 -and -not ($policy.IncNw -eq "All")) {
+                        $Issues.Add("targets specific networks")
+                    }
 
-                # Check if policy targets specific AuthFlow
-                if (-not $policy.AuthFlow -eq "") {
-                    $Issues += "targets AuthFlow"
-                }
+                    # Check if policy targets specific AuthFlow
+                    if (-not ($policy.AuthFlow -eq "")) {
+                        $Issues.Add("targets AuthFlow")
+                    }
 
-                # Check if policy targets specific App types
-                if ($policy.AppTypes -ne 'all') {
-                    $appTypeCount = ($policy.AppTypes -split ',' | ForEach-Object { $_.Trim() }).Count
-                    if ($appTypeCount -lt 4) {
-                        $Issues += "targets specific app types"
+                    # Check if policy targets specific App types
+                    if ($policy.AppTypes -ne 'all') {
+                        $appTypeCount = ($policy.AppTypes -split ',' | ForEach-Object { $_.Trim() }).Count
+                        if ($appTypeCount -lt 4) {
+                            $Issues.Add("targets specific app types")
+                        }
+                    }
+
+                    # Check GrantControls and AuthStrength
+                    $grantControlsStr = ($policy.GrantControls -join ' ')  # Convert to string for easier search
+                    $hasMfa = $grantControlsStr -match '\bmfa\b'
+                    $hasAuthStrength = -not [string]::IsNullOrWhiteSpace($policy.AuthStrength)
+
+                    if (-not $hasMfa -and -not $hasAuthStrength) {
+                        $Issues.Add("Neither MFA in GrantControls nor AuthStrength is configured")
+                    }
+
+                    if ($Issues.Count -gt 0) {
+                        $CapIssues = $true
+                        $AuthContextIssueSummary.Add("CAP '$($policy.DisplayName)' (AuthContext:$($policy.AuthContextId -join ', ')): $($Issues -join ' / ')")
+                    }
+
+                    [pscustomobject]@{
+                        Id            = $policy.Id
+                        DisplayName   = $policy.DisplayName
+                        AuthContextId = $policy.AuthContextId
+                        Issues        = if ($Issues.Count -gt 0) { @($Issues) } else { "-" }
                     }
                 }
-
-                # Check GrantControls and AuthStrength
-                $grantControlsStr = ($policy.GrantControls -join ' ')  # Convert to string for easier search
-                $hasMfa = $grantControlsStr -match '\bmfa\b'
-                $hasAuthStrength = -not [string]::IsNullOrWhiteSpace($policy.AuthStrength)
-
-                if (-not $hasMfa -and -not $hasAuthStrength) {
-                    $Issues += "Neither MFA in GrantControls nor AuthStrength is configured"
-                }
-
-                # Return a custom object if issues found
-                if ($issues.Count -gt 0) {
-                    $AuthContextIssues += $Issues -join ' / '
-                    $CapIssues = $true
-                }
-
-                [pscustomobject]@{
-                    Id            = $policy.Id
-                    DisplayName   = $policy.DisplayName
-                    AuthContextId = $policy.AuthContextId
-                    Issues        = $AuthContextIssues
-                }
-
-            }
+            )
 
             #Check if the role has an AuthContext which is not linked to a CAP
-            If (@($LinkedCaps).Count -eq 0) {
+            if (@($LinkedCaps).Count -eq 0) {
                 $warningMessages += "AuthContext ($claimValue) not linked to a CAP"
+            } elseif ($AuthContextIssueSummary.Count -gt 0) {
+                $AuthContextIssues = $AuthContextIssueSummary -join ', '
             }
-
-            $AuthContextIssues = "Linked CAP (AuthContext:$($policy.AuthContextId)) issues: $AuthContextIssues"
         }
 
         # Role activation time
