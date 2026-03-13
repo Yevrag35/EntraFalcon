@@ -403,6 +403,13 @@ function Invoke-CheckRoles {
             }
 
             foreach ($Assignment in $Assignments) {
+                switch ($Assignment.RoleTier) {
+                    0 { $RoleTier = "Tier-0"; break }
+                    1 { $RoleTier = "Tier-1"; break }
+                    2 { $RoleTier = "Tier-2"; break }
+                    3 { $RoleTier = "Tier-3"; break }
+                    default { $RoleTier = "Uncategorized" }
+                }
                 $SortedAzureRolesList.Add([PSCustomObject]@{
                     PrincipalId               = $PrincipalId
                     PrincipalDisplayName      = $PrincipalDisplayName
@@ -412,6 +419,7 @@ function Invoke-CheckRoles {
                     Conditions                = $Assignment.Conditions
                     Role                      = $Assignment.RoleDefinitionName
                     Scope                     = $Assignment.Scope
+                    RoleTier                  = $RoleTier
                     AssignmentType            = $Assignment.AssignmentType
                 })
             }
@@ -419,6 +427,13 @@ function Invoke-CheckRoles {
             $PrincipalDetails = Get-ObjectDetails -ObjectID $PrincipalId
 
             foreach ($Assignment in $Assignments) {
+                switch ($Assignment.RoleTier) {
+                    0 { $RoleTier = "Tier-0"; break }
+                    1 { $RoleTier = "Tier-1"; break }
+                    2 { $RoleTier = "Tier-2"; break }
+                    3 { $RoleTier = "Tier-3"; break }
+                    default { $RoleTier = "Uncategorized" }
+                }
                 $SortedAzureRolesList.Add([PSCustomObject]@{
                     PrincipalId               = $PrincipalId
                     PrincipalDisplayName      = $PrincipalDetails.DisplayName
@@ -428,6 +443,7 @@ function Invoke-CheckRoles {
                     Conditions                = $Assignment.Conditions
                     Role                      = $Assignment.RoleDefinitionName
                     Scope                     = $Assignment.Scope
+                    RoleTier                  = $RoleTier
                     AssignmentType            = $Assignment.AssignmentType
                 })
             }
@@ -476,7 +492,7 @@ function Invoke-CheckRoles {
     $mainEntraTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainEntraTableJson + "`n" + '</script>'
 
 
-    $mainAzureTable = $SortedAzureRoles | select-object -Property Scope,Role,RoleType,Conditions,AssignmentType,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
+    $mainAzureTable = $SortedAzureRoles | select-object -Property Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,PrincipalType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}}
     $mainAzureTableJson  = $mainAzureTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainAzureTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainAzureTableJson + "`n" + '</script>'
@@ -510,7 +526,7 @@ $headerHtml = @"
 "@
 
     #Generate and write HTML Entra role report
-    Set-GlobalReportManifest -CurrentReportKey 'Entra Roles' -CurrentReportName 'Role Assignments Entra ID' -Warnings $WarningReport
+    Set-GlobalReportManifest -CurrentReportKey 'RoleEntra' -CurrentReportName 'Role Assignments Entra ID' -Warnings $WarningReport
     $Report = ConvertTo-HTML -Body "$headerHtml $mainEntraTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
     $Report | Out-File "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
 
@@ -581,18 +597,23 @@ $headerHtml = @"
 
 
     if ($SortedAzureRoles.count -ge 1) {
-        Set-GlobalReportManifest -CurrentReportKey 'Azure Roles' -CurrentReportName 'Role Assignments Azure IAM'
+        Set-GlobalReportManifest -CurrentReportKey 'RoleAz' -CurrentReportName 'Role Assignments Azure IAM'
         $Report = ConvertTo-HTML -Body "$headerHtml $mainAzureTableHTML" -Title "$Title Enumeration" -Head ($global:GLOBALReportManifestScript + $global:GLOBALCss) -PostContent $GLOBALJavaScript
         $Report | Out-File "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).html"
         $headerTXTAzureRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-        $SortedAzureRoles | format-table Scope,Role,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+        $SortedAzureRoles | format-table Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Out-File -Width 512 "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
         if ($Csv) {
-            $SortedAzureRoles | select-object Scope,Role,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+            $SortedAzureRoles | select-object Scope,Role,RoleTier,RoleType,Conditions,AssignmentType,PrincipalDisplayName,PrincipalType | Export-Csv -Path "$outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
         }
         write-host "[+] Details of $($SortedAzureRoles.count) Azure role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Azure_$($StartTimestamp)_$($CurrentTenant.DisplayName)"
         
         #Add information to the enumeration summary
         $AzureEligibleCount = 0
+        $AzureTier0Count = 0
+        $AzureTier1Count = 0
+        $AzureTier2Count = 0
+        $AzureTier3Count = 0
+        $AzureTierUncatCount = 0
         $AssignmentsBuiltInRoles = 0
         $AssignmentPrincipalTypUsers = 0
         $AssignmentPrincipalTypGroups = 0
@@ -605,6 +626,14 @@ $headerHtml = @"
             }
             if ($Assignment.RoleType -match "BuiltInRole") {
                 $AssignmentsBuiltInRoles++
+            }
+
+            switch ($assignment.RoleTier) {
+                "Tier-0" { $AzureTier0Count++; break }
+                "Tier-1" { $AzureTier1Count++; break }
+                "Tier-2" { $AzureTier2Count++; break }
+                "Tier-3" { $AzureTier3Count++; break }
+                "Uncategorized" { $AzureTierUncatCount++ }
             }
 
             switch ($assignment.PrincipalType) {
@@ -623,6 +652,11 @@ $headerHtml = @"
         $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.Group = $AssignmentPrincipalTypGroups
         $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.SP = $AssignmentPrincipalTypSPs
         $GlobalAuditSummary.AzureRoleAssignments.PrincipalType.Unknown = $AssignmentPrincipalTypUnknown
+        $GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-0" = $AzureTier0Count
+        $GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-1" = $AzureTier1Count
+        $GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-2" = $AzureTier2Count
+        $GlobalAuditSummary.AzureRoleAssignments.Tiers."Tier-3" = $AzureTier3Count
+        $GlobalAuditSummary.AzureRoleAssignments.Tiers.Uncategorized = $AzureTierUncatCount
 
 
 
