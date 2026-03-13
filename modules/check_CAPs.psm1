@@ -652,7 +652,8 @@ function Invoke-CheckCaps {
         ###################### Analyzing policies
 
         $ExcludedUsersEffective = $policy.Conditions.Users.ExcludeUsers.count + $ExcUsersTroughGroups
-        $ExcludedNonUserTargets = $policy.Conditions.Users.ExcludeRoles.count + $ExcludedExternalUsersCount
+        $ExcludedRolesCount = @($policy.Conditions.Users.ExcludeRoles).Count
+        $ExcludedNonUserTargets = $ExcludedRolesCount + $ExcludedExternalUsersCount
         
         #Count condition types for policy complexity checks
         $SignInRiskCount = $policy.Conditions.SignInRiskLevels.count
@@ -937,8 +938,8 @@ function Invoke-CheckCaps {
                 $ErrorMessages += "has $ExcludedUsersEffective excluded users (direct or through groups)"
                 $RegisterSecInfosWarnings++
             }
-            if ($ExcludedNonUserTargets -gt 0) {
-                $ErrorMessages += "has $ExcludedNonUserTargets excluded roles or external user types"
+            if ($ExcludedRolesCount -gt 0) {
+                $ErrorMessages += "has $ExcludedRolesCount excluded roles"
                 $RegisterSecInfosWarnings++
             }
             if ($null -eq $IncludedUserCount -or $IncludedUserCount -ne "All") {
