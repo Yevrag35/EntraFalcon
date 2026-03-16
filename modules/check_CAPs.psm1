@@ -465,8 +465,8 @@ function Invoke-CheckCaps {
             $IncludedUserCount = 0
         }
 
-        $IncUsersTroughGroups = Get-UsersThroughGroupsCount -GroupIds $policy.Conditions.Users.IncludeGroups
-        $ExcUsersTroughGroups = Get-UsersThroughGroupsCount -GroupIds $policy.Conditions.Users.ExcludeGroups
+        $IncUsersViaGroups = Get-UsersThroughGroupsCount -GroupIds $policy.Conditions.Users.IncludeGroups
+        $ExcUsersViaGroups = Get-UsersThroughGroupsCount -GroupIds $policy.Conditions.Users.ExcludeGroups
 
         if ($policy.Conditions.Applications.IncludeApplications -contains "All") {
             $IncludedResourcesCount = "All"
@@ -651,7 +651,7 @@ function Invoke-CheckCaps {
 
         ###################### Analyzing policies
 
-        $ExcludedUsersEffective = $policy.Conditions.Users.ExcludeUsers.count + $ExcUsersTroughGroups
+        $ExcludedUsersEffective = $policy.Conditions.Users.ExcludeUsers.count + $ExcUsersViaGroups
         $ExcludedRolesCount = @($policy.Conditions.Users.ExcludeRoles).Count
         $ExcludedNonUserTargets = $ExcludedRolesCount + $ExcludedExternalUsersCount
         
@@ -1129,12 +1129,12 @@ function Invoke-CheckCaps {
             ModifiedDateTime = $policy.ModifiedDateTime
             State = $policy.State
             IncUsers = $IncludedUserCount
-            IncUsersTroughGroups = $IncUsersTroughGroups
+            IncUsersViaGroups = $IncUsersViaGroups
             IncGroups = $policy.Conditions.Users.IncludeGroups.count
             IncRoles = $policy.Conditions.Users.IncludeRoles.count
             IncExternals = $IncludedExternalUsersCount
             ExcUsers = $policy.Conditions.Users.ExcludeUsers.count
-            ExcUsersTroughGroups = $ExcUsersTroughGroups
+            ExcUsersViaGroups = $ExcUsersViaGroups
             ExcGroups = $policy.Conditions.Users.ExcludeGroups.count
             ExcRoles = $policy.Conditions.Users.ExcludeRoles.count
             ExcExternals = $ExcludedExternalUsersCount
@@ -1226,7 +1226,7 @@ $MissingPolicies
     $DetailTxtBuilder = [System.Text.StringBuilder]::new()
     $AppendixNetworkLocations = ""
     #Define output of the main table
-    $tableOutput = $ConditionalAccessPolicies | select-object DisplayName,DisplayNameLink,State,IncResources,ExcResources,AuthContext,IncUsers,IncUsersTroughGroups,ExcUsers,ExcUsersTroughGroups,IncGroups,ExcGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings
+    $tableOutput = $ConditionalAccessPolicies | select-object DisplayName,DisplayNameLink,State,IncResources,ExcResources,AuthContext,IncUsers,IncUsersViaGroups,ExcUsers,ExcUsersViaGroups,IncGroups,ExcGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings
 
     #Build the detail section of the report
     foreach ($item in $AllPolicies) {
@@ -1379,7 +1379,7 @@ $MissingPolicies
     write-host ""
 
     if ($AllPoliciesCount -gt 0) {
-        $mainTable = $tableOutput | select-object -Property @{Label="DisplayName"; Expression={$_.DisplayNameLink}},State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersTroughGroups,ExcGroups,ExcUsersTroughGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings
+        $mainTable = $tableOutput | select-object -Property @{Label="DisplayName"; Expression={$_.DisplayNameLink}},State,IncResources,ExcResources,AuthContext,IncUsers,ExcUsers,IncGroups,IncUsersViaGroups,ExcGroups,ExcUsersViaGroups,IncRoles,ExcRoles,IncExternals,ExcExternals,DeviceFilter,IncPlatforms,ExcPlatforms,SignInRisk,UserRisk,IncNw,ExcNw,AppTypes,AuthFlow,UserActions,GrantControls,SessionControls,SignInFrequency,SignInFrequencyInterval,AuthStrength,Warnings
         $mainTableJson  = $mainTable | ConvertTo-Json -Depth 10 -Compress       
     } else {
         #Define an empty JSON object to make the HTML report loading
