@@ -2684,7 +2684,8 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                         }
                     }
                     foreach ($issue in $issueItems) {
-                        if (-not [string]::IsNullOrWhiteSpace("$issue")) {
+                        $issueText = "$issue".Trim()
+                        if (-not [string]::IsNullOrWhiteSpace($issueText) -and $issueText -ne "-") {
                             $linkedCapsHaveIssues = $true
                             break
                         }
@@ -5878,7 +5879,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                     }
                     foreach ($issue in $issueItems) {
                         $issueText = "$issue".Trim()
-                        if (-not [string]::IsNullOrWhiteSpace($issueText)) {
+                        if (-not [string]::IsNullOrWhiteSpace($issueText) -and $issueText -ne "-") {
                             $linkedCapIssues.Add($issueText)
                             $pim009HasCapIssues = $true
                         }
