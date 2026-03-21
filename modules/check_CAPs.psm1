@@ -1321,7 +1321,7 @@ $MissingPolicies
         # Convert the raw CAP JSON to YAML, enriching it with HTTP links.
         if ($null -ne $item.Conditions) {
             $ConditionsHTML = ConvertTo-Yaml -InputObject $item.Conditions -Report "HTML"
-            if (-not $null -eq $ConditionsHTML) {
+            if ($null -ne $ConditionsHTML) {
                 $HtmlConditions += $ConditionsHTML
 
                 # Converting again the raw CAP YAML, enriching it with text only
@@ -1335,7 +1335,7 @@ $MissingPolicies
         # Convert the raw CAP JSON to YAML, enriching it with HTTP links.
         if ($null -ne $item.SessionControls) {
             $SessionControlsHTML = ConvertTo-Yaml -InputObject $item.SessionControls -Report "HTML"
-            if (-not $null -eq $SessionControlsHTML) {
+            if ($null -ne $SessionControlsHTML) {
                 $HtmlSessionControls += $SessionControlsHTML
 
                 # Converting again the raw CAP YAML, enriching it with text only
@@ -1349,7 +1349,7 @@ $MissingPolicies
         # Convert the raw CAP JSON to YAML, enriching it with HTTP links.
         if ($null -ne $item.GrantControls) {
             $GrantControlsHTML = ConvertTo-Yaml -InputObject $item.GrantControls -Report "HTML"
-            if (-not $null -eq $GrantControlsHTML) {
+            if ($null -ne $GrantControlsHTML) {
                 $HtmlGrantControls += $GrantControlsHTML
 
                 # Converting again the raw CAP YAML, enriching it with text only
