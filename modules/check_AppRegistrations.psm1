@@ -95,6 +95,7 @@ function Invoke-CheckAppRegistrations {
         }
 
         if ($type -eq "Secret" ) {
+            $Expired = $null
             if ($null -ne $Object.EndDateTime) {
                 if (($Object.EndDateTime - (Get-Date).Date).TotalDays -le 0) {
                     $Expired = $True
@@ -113,7 +114,7 @@ function Invoke-CheckAppRegistrations {
         }
 
         if ($type -eq "Cert" ) {
-
+            $Expired = $null
             if ($null -ne $Object.EndDateTime) {
                 if (($Object.EndDateTime - (Get-Date).Date).TotalDays -le 0) {
                     $Expired = $True
@@ -294,7 +295,7 @@ function Invoke-CheckAppRegistrations {
 
         #Process app credentials
         $AppCredentialsSecrets = foreach ($creds in $item.PasswordCredentials) {
-
+            $Expired = $null
             if ($null -ne $creds.EndDateTime) {
                 try {
                     $endDate = [datetime]$creds.EndDateTime
@@ -325,6 +326,7 @@ function Invoke-CheckAppRegistrations {
         }
 
         $AppCredentialsCertificates = foreach ($creds in $item.KeyCredentials) {
+            $Expired = $null
             if ($null -ne $creds.EndDateTime) {
                 try {
                     $endDate = [datetime]$creds.EndDateTime
