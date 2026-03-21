@@ -3910,7 +3910,7 @@ function RefreshAuthenticationMsGraph {
     if (AuthCheckMSGraph) {
         $result = $true
     } else {
-        write-host "[!] Refresh failed"
+        write-host "[!] Token refresh failed. Subsequent API calls may fail!"
         $result = $false
     }
 
