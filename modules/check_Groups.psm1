@@ -1091,7 +1091,7 @@ function Invoke-CheckGroups {
                 [void]$Warnings.Add("Group is used in CAP and is dynamic")
             } elseif ($group.OnPremisesSyncEnabled -eq $true) {
                 [void]$Warnings.Add("Group is used in CAP and from on-prem")
-            } elseif ($group.Visibility -eq "Public" -and $groupDynamic -eq $false -and $grouptype -contains "M365 Group") {
+            } elseif ($group.Visibility -eq "Public" -and $group.Dynamic -eq $false -and $grouptype -contains "M365 Group") {
                 [void]$Warnings.Add("Public M365 group in CAP")
             } elseif (-not $Protected) {
                 [void]$Warnings.Add("Group is used in CAP and is not protected")
