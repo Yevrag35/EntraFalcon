@@ -694,8 +694,6 @@ function Invoke-CheckManagedIdentities {
             AppCredentials = $AppCredentialsCount
             AppCredentialsDetails = $AppCredentials
             AppApiPermission = $AppApiPermission
-            AppRoles = ($MatchingAppRoles | Measure-Object).count
-            AppRolesDetails = $MatchingAppRoles
             ApiDangerous = $AppApiPermissionDangerous
             ApiHigh = $AppApiPermissionHigh
             ApiMedium = $AppApiPermissionMedium
@@ -727,7 +725,6 @@ function Invoke-CheckManagedIdentities {
         $ReportingMIInfo = @()
         $ReportingRoles = @()
         $ReportingAzureRoles = @()
-        $ReportingAppRoles = @()
         $ReportingAPIPermission = @()
         $ReportingAppOwner = @()
         $ReportingGroupMember = @()
@@ -903,25 +900,6 @@ function Invoke-CheckManagedIdentities {
             [void]$DetailTxtBuilder.AppendLine(($ReportingCredentials | Out-String -Width 512))
         } 
 
-        ############### App Roles
-        if ($($item.AppRolesDetails | Measure-Object).count -ge 1) {
-            $ReportingAppRoles = foreach ($object in $($item.AppRolesDetails)) {
-                [pscustomobject]@{ 
-                    "AppRoleName" = $($object.AppRoleName)
-                    "RoleEnabled" = $($object.RoleEnabled)
-                    "AppRoleAssignmentType" = $($object.AppRoleAssignmentType)
-                    "AppRoleMember" = $($object.AppRoleMember)
-                }
-            }
-
-            [void]$DetailTxtBuilder.AppendLine("================================================================================================`n")
-            [void]$DetailTxtBuilder.AppendLine("Assigned App Roles`n")
-            [void]$DetailTxtBuilder.AppendLine("================================================================================================`n")
-            [void]$DetailTxtBuilder.AppendLine(($ReportingAppRoles | Out-String))
-        }
-
-       
-
         ############### API permission
         if ($($item.AppApiPermission | Measure-Object).count -ge 1) {
             $ReportingAPIPermission = foreach ($object in $($item.AppApiPermission)) {
@@ -946,7 +924,6 @@ function Invoke-CheckManagedIdentities {
             "General Information" = $ReportingMIInfo
             "Active Entra Role Assignments" = $ReportingRoles
             "Azure IAM assignment" = $ReportingAzureRoles
-            "Assigned App Roles" = $ReportingAppRoles
             "API Permission (Application)" = $ReportingAPIPermission
             "Owned App Registrations" = $ReportingAppOwner
             "Member in Groups (transitive)" = $ReportingGroupMember
