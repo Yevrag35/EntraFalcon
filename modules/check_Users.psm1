@@ -430,7 +430,7 @@ function Invoke-CheckUsers {
                     }
 
                     '#microsoft.graph.agentIdentity' {
-                        Write-Log -Level Trace -Message "The user $($user.Id) owns the AgentIdentity $($OwnedObject.Id)"
+                        Write-Log -Level Trace -Message "The user $($item.Id) owns the AgentIdentity $($OwnedObject.Id)"
                         [void]$UserOwnedAgentIdentitys.Add(
                             [PSCustomObject]@{
                                 Id = $OwnedObject.Id
@@ -439,7 +439,7 @@ function Invoke-CheckUsers {
                     }
 
                     '#microsoft.graph.agentIdentityBlueprint' {
-                        Write-Log -Level Trace -Message "The user $($user.Id) owns the AgentIdentityBlueprint $($OwnedObject.Id)"
+                        Write-Log -Level Trace -Message "The user $($item.Id) owns the AgentIdentityBlueprint $($OwnedObject.Id)"
                         [void]$UserOwnedAgentIdentityBlueprint.Add(
                             [PSCustomObject]@{
                                 Id = $OwnedObject.Id
@@ -447,7 +447,7 @@ function Invoke-CheckUsers {
                         )
                     }
                     '#microsoft.graph.agentIdentityBlueprintPrincipal' {
-                        Write-Log -Level Trace -Message "The user $($user.Id) owns the AgentIdentityBlueprintPrincipal $($OwnedObject.Id)"
+                        Write-Log -Level Trace -Message "The user $($item.Id) owns the AgentIdentityBlueprintPrincipal $($OwnedObject.Id)"
                         [void]$UserOwnedAgentIdentityBlueprint.Add(
                             [PSCustomObject]@{
                                 Id = $OwnedObject.Id
@@ -465,7 +465,7 @@ function Invoke-CheckUsers {
                     }
         
                     default {
-                        Write-Log -Level Debug -Message "Unknown owned object type: $($OwnedObject.'@odata.type') for user $($user.Id)"
+                        Write-Log -Level Debug -Message "Unknown owned object type: $($OwnedObject.'@odata.type') for user $($item.Id)"
                     }
                 }
             }
