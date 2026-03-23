@@ -948,7 +948,7 @@ function Invoke-CheckAppRegistrations {
                         "Scope" = $($object.Scope)
                         "AssignmentType"  = $($object.AssignmentType)
                         "Name" = $($object.DisplayName)
-                        "NameLink" = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.id)>$($object.DisplayName)</a>"
+                        "NameLink" = "<a href=Groups_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html#$($object.PrincipalId)>$($object.DisplayName)</a>"
                         "OnPremSync" = $($object.OnPrem)
                         "Users" = $($object.Users)
                         "Guests" = $($object.Guests)
