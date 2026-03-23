@@ -3759,6 +3759,50 @@ function Get-OrgInfo {
     return $OrgInfo
 }
 
+#Get tenant domains including federation configuration for federated domains
+function Get-TenantDomains {
+    Write-Host "[*] Retrieve tenant domains"
+    $QueryParameters = @{
+        '$select' = "id,authenticationType,isAdminManaged,isDefault,isVerified,supportedServices"
+    }
+    $DomainsRaw = @(Send-ApiRequest -Method GET -Uri "https://graph.microsoft.com/beta/domains" -AccessToken $GLOBALMsGraphAccessToken.access_token -QueryParameters $QueryParameters -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+    Write-Log -Level Debug -Message "Retrieved $($DomainsRaw.Count) domains"
+
+    $Domains = foreach ($domain in $DomainsRaw) {
+        $federatedIdpMfaBehavior = $null
+        if ($domain.authenticationType -eq "Federated") {
+            Write-Log -Level Debug -Message "Fetching federation configuration for domain: $($domain.id)"
+            $FedConfig = @(Send-ApiRequest -Method GET -Uri "https://graph.microsoft.com/beta/domains/$($domain.id)/federationConfiguration" -AccessToken $GLOBALMsGraphAccessToken.access_token -QueryParameters @{ '$select' = 'federatedIdpMfaBehavior' } -UserAgent $($GlobalAuditSummary.UserAgent.Name))
+            if ($FedConfig.Count -gt 0) {
+                if ($FedConfig.Count -gt 1) {
+                    Write-Log -Level Debug -Message "Multiple federation configurations found for domain: $($domain.id). Using the first entry."
+                }
+                $federatedIdpMfaBehavior = [string]$FedConfig[0].federatedIdpMfaBehavior
+                Write-Log -Level Debug -Message "federatedIdpMfaBehavior for $($domain.id): $federatedIdpMfaBehavior"
+            } else {
+                Write-Log -Level Debug -Message "No federation configuration found for domain: $($domain.id)"
+            }
+        }
+        [PSCustomObject]@{
+            Id                      = $domain.id
+            AuthenticationType      = $domain.authenticationType
+            IsAdminManaged          = $domain.isAdminManaged
+            IsDefault               = $domain.isDefault
+            IsVerified              = $domain.isVerified
+            SupportedServices       = @($domain.supportedServices)
+            FederatedIdpMfaBehavior = $federatedIdpMfaBehavior
+        }
+    }
+
+    $GlobalAuditSummary.Domains.Count = @($Domains).Count
+    $GlobalAuditSummary.Domains.Federated = @($Domains | Where-Object { $_.AuthenticationType -eq "Federated" }).Count
+    $GlobalAuditSummary.Domains.Verified = @($Domains | Where-Object { $_.IsVerified -eq $true }).Count
+    $GlobalAuditSummary.Domains.Default = @($Domains | Where-Object { $_.IsDefault -eq $true }).Count
+    $GlobalAuditSummary.Domains.AdminManaged = @($Domains | Where-Object { $_.IsAdminManaged -eq $true }).Count
+
+    return $Domains
+}
+
 #Get information if users are MFA capable
 function Get-RegisterAuthMethodsUsers {
     # Requires Premium otherwise HTTP 403:Tenant is not a B2C tenant and doesn't have premium license
@@ -5382,6 +5426,7 @@ function start-InitTasks {
         EntraRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'App' = 0; 'MI' = 0; 'Unknown' = 0}; Tiers = @{ 'Tier-0' = 0; 'Tier-1' = 0; 'Tier-2' = 0; 'Uncategorized' = 0} }
         AzureRoleAssignments   = @{ Count = 0; Eligible = 0; BuiltIn = 0; PrincipalType = @{ 'User' = 0; 'Group' = 0; 'SP' = 0; 'Unknown' = 0}; Tiers = @{ 'Tier-0' = 0; 'Tier-1' = 0; 'Tier-2' = 0; 'Tier-3' = 0; 'Uncategorized' = 0} }
         PimSettings            = @{ Count = 0}
+        Domains                = @{ Count = 0; Federated = 0; Verified = 0; Default = 0; AdminManaged = 0 }
         Errors                 = @()
     }
 }
@@ -6047,4 +6092,4 @@ function Show-EntraFalconBanner {
     Write-Host ""
 }
 
-Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility
+Export-ModuleMember -Function Show-EntraFalconBanner,AuthenticationMSGraph,Get-TenantReportAvailability,Get-TenantDomains,Initialize-TenantReportTabs,Set-GlobalReportManifest,Get-EffectiveEntraLicense,Get-Devices,Get-UsersBasic,start-CleanUp,Format-ReportSection,Get-OrgInfo,Get-LogLevel, Write-Log,Invoke-MsGraphRefreshPIM,Write-LogVerbose,Invoke-AzureRoleProcessing,Get-RegisterAuthMethodsUsers,Invoke-EntraRoleProcessing,Get-EntraPIMRoleAssignments,AuthCheckMSGraph,RefreshAuthenticationMsGraph,EnsureAuthSecurityFindingsMsGraph,RefreshAuthenticationSecurityFindingsMsGraph,Get-PimforGroupsAssignments,Invoke-CheckTokenExpiration,Invoke-MsGraphAuthPIM,EnsureAuthMsGraph,Get-AzureRoleDetails,Get-AdministrativeUnitsWithMembers,Get-ConditionalAccessPolicies,Get-EntraRoleAssignments,Get-APIPermissionCategory,Get-ObjectInfo,EnsureAuthAzurePsNative,checkSubscriptionNative,Get-AllAzureIAMAssignmentsNative,Get-PIMForGroupsAssignmentsDetails,Show-EnumerationSummary,start-InitTasks,Get-HighestTierLabel,Merge-HigherTierLabel,Get-GroupDetails,Get-GroupActiveRoleMetrics,Get-EntraFalconHostOs,Test-NonWindowsAuthFlowCompatibility
