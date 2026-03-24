@@ -355,7 +355,7 @@ function Invoke-CheckCaps {
     foreach ($assignmentList in $TenantRoleAssignments.Values) {
         foreach ($assignment in $assignmentList) {
             #Taking only Tier 0 and Tier 1 roles and hide the Directory Synchronization Accounts role
-            if ($assignment.RoleTier -in 0, 1 -and $assignment.RoleDefinitionId -ne "d29b2b05-8046-44ba-8758-1e26182fcf32") {
+            if ($assignment.RoleTier -in 0, 1 -and $assignment.RoleDefinitionId -ne "d29b2b05-8046-44ba-8758-1e26182fcf32" -and ($Users.ContainsKey($assignment.PrincipalId) -or $AllGroupsDetails.ContainsKey($assignment.PrincipalId))) {
                 $HighTierAssignments += $assignment
             }
         }
@@ -369,7 +369,8 @@ function Invoke-CheckCaps {
         foreach ($assignment in $assignmentList) {
             $scopeDisplay = $assignment.ScopeResolved.DisplayName
 
-            if ($scopeDisplay -ne '/') {
+            $principalId = $assignment.PrincipalId
+            if ($scopeDisplay -ne '/' -and ($Users.ContainsKey($principalId) -or $AllGroupsDetails.ContainsKey($principalId))) {
                 $roleId   = $assignment.RoleDefinitionId
                 $roleName = $assignment.DisplayName
                 $roleTier = $assignment.RoleTier
