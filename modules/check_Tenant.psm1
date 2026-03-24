@@ -3004,10 +3004,9 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 $incUsersText = "$($policy.IncUsers)".Trim().ToLowerInvariant()
                 if ($incUsersText -eq "all" -or (Get-IntSafe $policy.IncUsers) -gt 0) { $hasIncludedTargets = $true }
                 if ((Get-IntSafe $policy.IncGroups) -gt 0) { $hasIncludedTargets = $true }
-                if ((Get-IntSafe $policy.IncExternals) -gt 0) { $hasIncludedTargets = $true }
                 if ((Get-IntSafe $policy.IncRoles) -gt 0) { $hasIncludedTargets = $true }
                 if (-not $hasIncludedTargets) {
-                    $hardIssues.Add("missing included users, groups, roles, or externals")
+                    $hardIssues.Add("missing included users, groups, or roles")
                 }
 
                 if ($hardIssues.Count -eq 0) {
