@@ -128,16 +128,18 @@ function Invoke-CheckPIM {
         }
     }
 
-    # Count Active/Eligible assignments per RoleDefinitionId
+    # Count Eligible / direct active assignments / PIM-activated assignments per RoleDefinitionId
     $AssignmentCounts = $FlattenedAssignments | Group-Object -Property RoleDefinitionId | ForEach-Object {
         $roleId = $_.Name
-        $activeAssignments = @($_.Group | Where-Object { $_.AssignmentType -eq "Active" })
         $eligibleAssignments = @($_.Group | Where-Object { $_.AssignmentType -eq "Eligible" })
+        $assignedAssignments = @($_.Group | Where-Object { $_.AssignmentType -eq "Active" -and $_.ActivatedViaPIM -ne $true })
+        $activatedAssignments = @($_.Group | Where-Object { $_.AssignmentType -eq "Active" -and $_.ActivatedViaPIM -eq $true })
 
         [PSCustomObject]@{
             RoleDefinitionId    = $roleId
-            ActiveAssignments   = $activeAssignments.Count
             EligibleAssignments = $eligibleAssignments.Count
+            AssignedAssignments = $assignedAssignments.Count
+            ActivatedAssignments = $activatedAssignments.Count
         }
     }
     
@@ -157,8 +159,9 @@ function Invoke-CheckPIM {
 
         # Get counts
         $counts = $AssignmentCounts | Where-Object { $_.RoleDefinitionId -eq $roleId }
-        $activeCount = if ($counts) { $counts.ActiveAssignments } else { 0 }
         $eligibleCount = if ($counts) { $counts.EligibleAssignments } else { 0 }
+        $assignedCount = if ($counts) { $counts.AssignedAssignments } else { 0 }
+        $activatedCount = if ($counts) { $counts.ActivatedAssignments } else { 0 }
 
         # Find related policy assignment(s)
         $policyAssignments = $AllPimEntraPoliciesAssignments | Where-Object { $_.roleDefinitionId -eq $roleId }
@@ -175,8 +178,9 @@ function Invoke-CheckPIM {
         $FinalRoleData += [PSCustomObject]@{
             Id                  = $roleId
             RoleName            = $roleName
-            ActiveAssignments   = $activeCount
             EligibleAssignments = $eligibleCount
+            AssignedAssignments = $assignedCount
+            ActivatedAssignments = $activatedCount
             PolicyRules         = $allRules
         }
     }
@@ -550,7 +554,8 @@ function Invoke-CheckPIM {
             Role                      = $item.RoleName
             Tier                      = $RoleTier
             Eligible                  = $item.EligibleAssignments
-            Active                    = $item.ActiveAssignments
+            Direct                    = $item.AssignedAssignments
+            Activated                 = $item.ActivatedAssignments
 
             ActivationMFA             = $mfaEnabled
             ActivationJustification   = $justificationEnabled
@@ -609,10 +614,10 @@ function Invoke-CheckPIM {
 
 
     #Define output of the main table
-    $tableOutput = $AllPIMDetails | select-object Role,RoleLink,Tier,Eligible,Active,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings
+    $tableOutput = $AllPIMDetails | select-object Role,RoleLink,Tier,Eligible,Direct,Activated,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings
     
     #Create HTML main table
-    $mainTable = $tableOutput | select-object -Property @{Name = "Role"; Expression = { $_.RoleLink}},Tier,Eligible,Active,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings
+    $mainTable = $tableOutput | select-object -Property @{Name = "Role"; Expression = { $_.RoleLink}},Tier,Eligible,Direct,Activated,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings
     $mainTableJson  = $mainTable | ConvertTo-Json -Depth 5 -Compress
     $mainTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainTableJson + "`n" + '</script>'
 
@@ -636,7 +641,8 @@ function Invoke-CheckPIM {
             "RoleName" = $($item.Role)
             "Role Tier" = $($item.Tier)
             "Eligible Assignments"  = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html?Role=$([System.Uri]::EscapeDataString($item.Role))&AssignmentType=Eligible>$($item.Eligible)</a>"
-            "Active Assignments"     = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html?Role=$([System.Uri]::EscapeDataString($item.Role))&AssignmentType=Active>$($item.Active)</a>"
+            "Direct Assignments"  = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html?Role=$([System.Uri]::EscapeDataString($item.Role))&AssignmentType=Active&ActivatedViaPIM=false>$($item.Direct)</a>"
+            "Activated Assignments" = "<a href=Role_Assignments_Entra_$($StartTimestamp)_$([System.Uri]::EscapeDataString($CurrentTenant.DisplayName)).html?Role=$([System.Uri]::EscapeDataString($item.Role))&AssignmentType=Active&ActivatedViaPIM=true>$($item.Activated)</a>"
         }
 
         #Build dynamic TXT report property list
@@ -823,9 +829,9 @@ $ObjectsDetailsHEAD = @'
 
     #Write TXT and CSV files
     $headerTXT | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $tableOutput | format-table Role,Tier,Eligible,Active,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $tableOutput | format-table Role,Tier,Eligible,Direct,Activated,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings | Out-File -Width 512 "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     if ($Csv) {
-        $tableOutput | select-object Role,Tier,Eligible,Active,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+        $tableOutput | select-object Role,Tier,Eligible,Direct,Activated,ActivationAuthContext,ActivationMFA,ActivationJustification,ActivationTicketing,ActivationDuration,ActivationApproval,EligibleExpiration,EligibleExpirationTime,ActiveExpiration,ActiveExpirationTime,ActiveAssignMFA,ActiveAssignJustification,AlertAssignEligible,AlertAssignActive,AlertActivation,Warnings | Export-Csv -Path "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
     }
     $DetailOutputTxt | Out-File "$outputFolder\$($Title)_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append    
 

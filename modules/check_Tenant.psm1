@@ -18,7 +18,8 @@ function Invoke-CheckTenant {
         [Parameter(Mandatory=$true)][hashtable]$PimforEntraRoles,
         [Parameter(Mandatory=$true)][hashtable]$AllGroupsDetails,
         [Parameter(Mandatory=$false)][hashtable]$Devices,
-        [Parameter(Mandatory=$true)][hashtable]$Users
+        [Parameter(Mandatory=$true)][hashtable]$Users,
+        [Parameter(Mandatory=$true)][hashtable]$TenantRoleAssignments
     )
     #endregion
 
@@ -1219,7 +1220,7 @@ function Invoke-CheckTenant {
   },
   {
     "FindingId": "PIM-002",
-    "Title": "Tier-0 Roles Only Permanently Assigned",
+    "Title": "Tier-0 Roles With Active Assignments Outside PIM",
     "Category": "PIM",
     "Severity": 2,
     "Description": "",
@@ -2071,7 +2072,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     }
     $PIM002VariantProps = @{
         Default = @{
-            Threat = '<p>The affected roles do not benefit from the additional protection provided by Privileged Identity Management (PIM). If a permanently assigned privileged account is compromised, attackers can immediately abuse the role without additional approval or time-based restrictions, potentially leading to full tenant compromise.</p>'
+            Threat = '<p>The affected Tier-0 roles have active user or group assignments that are not activated through Privileged Identity Management (PIM). If a permanently assigned privileged account is compromised, attackers can immediately abuse the role without additional approval or time-based restrictions, potentially leading to full tenant compromise.</p>'
             Remediation = '<p>Do not permanently assign the affected roles. Grant privileged access exclusively through Privileged Identity Management (PIM) with limited activation duration. Configure secure activation settings, such as requiring an authentication context, or approval by an independent approver.</p><p><strong>Note:</strong> Emergency access accounts should be excluded and may remain permanently assigned to required roles.</p>'
         }
     }
@@ -2601,7 +2602,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     #region Enumeration: PIM Role Buckets
     # PIM-001/PIM-002/PIM-003/PIM-004/PIM-005/PIM-006/PIM-007/PIM-008/PIM-009: Collect PIM role subsets in one pass for reuse in multiple checks.
     $pimRolesWithEligibleAssignments = [System.Collections.Generic.List[object]]::new()
-    $pimTier0OnlyPermanentAssignments = [System.Collections.Generic.List[object]]::new()
     $pimTier0LongActivationDuration = [System.Collections.Generic.List[object]]::new()
     $pimTier0MissingJustificationOrTicketing = [System.Collections.Generic.List[object]]::new()
     $pimTier0AllowPermanentActiveAssignments = [System.Collections.Generic.List[object]]::new()
@@ -2615,7 +2615,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $roleConfig = $entry.Value
             if (-not $roleConfig) { continue }
             $eligibleCount = 0
-            $activeCount = 0
             $activationDurationHours = 0.0
             $requiresJustification = $false
             $requiresTicketing = $false
@@ -2631,7 +2630,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $linkedCapsCount = 0
             $linkedCapsHaveIssues = $false
             if ($null -ne $roleConfig.Eligible) { [int]::TryParse("$($roleConfig.Eligible)", [ref]$eligibleCount) | Out-Null }
-            if ($null -ne $roleConfig.Active) { [int]::TryParse("$($roleConfig.Active)", [ref]$activeCount) | Out-Null }
             if ($null -ne $roleConfig.ActivationDuration) {
                 try { $activationDurationHours = [double]$roleConfig.ActivationDuration } catch { $activationDurationHours = 0.0 }
             }
@@ -2696,9 +2694,6 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             $isGlobalAdministrator = ("$($roleConfig.Role)" -ieq "Global Administrator")
             if ($eligibleCount -gt 0) {
                 $pimRolesWithEligibleAssignments.Add($roleConfig)
-            }
-            if ("$($roleConfig.Tier)" -eq "Tier-0" -and $eligibleCount -eq 0 -and $activeCount -gt 0) {
-                $pimTier0OnlyPermanentAssignments.Add($roleConfig)
             }
             if ("$($roleConfig.Tier)" -eq "Tier-0" -and $eligibleCount -gt 0 -and $activationDurationHours -gt 4.0) {
                 $pimTier0LongActivationDuration.Add($roleConfig)
@@ -5567,15 +5562,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-001" -Props @{
             Status = "NotVulnerable"
             Description = "<p>Privileged Identity Management (PIM) for Entra ID roles is in use. There are $($pimRolesWithEligibleAssignments.Count) roles with eligible assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Eligible=%3E0&columns=Role%2CTier%2CEligible%2CActive%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Eligible=%3E0&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
             AffectedSortKey = "_SortTier"
             AffectedSortDir = "ASC"
             AffectedObjects = $pimEligibleAffected
         }
     }
 
-    # PIM-002: Validate that Tier-0 roles are not only permanently assigned.
-    # Reuse the pre-filtered role set from the shared PIM enumeration loop.
+    # PIM-002: Validate that Tier-0 roles do not have active user/group assignments outside PIM activation.
     if ($skipAdditionalPimChecks) {
         Write-Log -Level Verbose -Message "[PIM-002] Skipping check because PIM is not in use for Entra roles."
         Set-FindingOverride -FindingId "PIM-002" -Props @{
@@ -5584,30 +5578,118 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             AffectedObjects = @()
             RelatedReportUrl = ""
         }
-    } elseif ($pimTier0OnlyPermanentAssignments.Count -gt 0) {
-        Write-Log -Level Verbose -Message "[PIM-002] Found $($pimTier0OnlyPermanentAssignments.Count) Tier-0 roles with only permanent assignments."
-        $pimTier0PermanentAffected = [System.Collections.Generic.List[object]]::new()
-        foreach ($object in $pimTier0OnlyPermanentAssignments) {
-            $pimTier0PermanentAffected.Add([pscustomobject][ordered]@{
-                "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
-                "Role Tier" = $object.Tier
-                "Eligible Assignments" = $object.Eligible
-                "Active Assignments" = $object.Active
+    } else {
+        $pim002CandidateAssignments = [System.Collections.Generic.List[object]]::new()
+        foreach ($assignmentSet in $TenantRoleAssignments.Values) {
+            foreach ($assignment in @($assignmentSet)) {
+                if ($null -eq $assignment) { continue }
+                if ("$($assignment.AssignmentType)" -ne "Active") { continue }
+                if ($assignment.ActivatedViaPIM -eq $true) { continue }
+                if ((Get-NormalizedRoleTierLabel $assignment.RoleTier) -ne "0") { continue }
+
+                $principalId = "$($assignment.PrincipalId)"
+                if ([string]::IsNullOrWhiteSpace($principalId)) { continue }
+
+                $principalType = $null
+                $principalDisplayName = $null
+                $principalLink = $null
+
+                if ($Users.ContainsKey($principalId)) {
+                    $principalType = "User"
+                    $principalDisplayName = $Users[$principalId].UPN
+                    $principalLink = "Users_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$principalId"
+                } elseif ($AllGroupsDetails.ContainsKey($principalId)) {
+                    $principalType = "Group"
+                    $principalDisplayName = $AllGroupsDetails[$principalId].DisplayName
+                    $principalLink = "Groups_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$principalId"
+                } else {
+                    continue
+                }
+
+                if ([string]::IsNullOrWhiteSpace($principalDisplayName)) {
+                    $principalDisplayName = $principalId
+                }
+
+                $scopeDisplayName = if ($assignment.ScopeResolved.DisplayName) { $assignment.ScopeResolved.DisplayName } elseif ($assignment.DirectoryScopeId) { $assignment.DirectoryScopeId } else { "/" }
+                $scopeType = if ($assignment.ScopeResolved.Type) { $assignment.ScopeResolved.Type } else { "Tenant" }
+                $roleDisplayName = if ($assignment.DisplayName) { $assignment.DisplayName } else { $assignment.RoleDefinitionId }
+                $roleGroupingKey = "$($assignment.RoleDefinitionId)|$($assignment.DirectoryScopeId)"
+
+                $pim002CandidateAssignments.Add([pscustomobject]@{
+                    RoleGroupingKey = $roleGroupingKey
+                    RoleDefinitionId = $assignment.RoleDefinitionId
+                    Role = $roleDisplayName
+                    RoleTier = "Tier-0"
+                    DirectoryScopeId = $assignment.DirectoryScopeId
+                    Scope = "$scopeDisplayName ($scopeType)"
+                    PrincipalId = $principalId
+                    PrincipalType = $principalType
+                    PrincipalDisplayName = $principalDisplayName
+                    PrincipalLink = $principalLink
+                    PrincipalDisplayNameLink = "<a href=`"$principalLink`" target=`"_blank`">$principalDisplayName</a>"
+                })
+            }
+        }
+
+        $pim002Violations = [System.Collections.Generic.List[object]]::new()
+        foreach ($roleGroup in ($pim002CandidateAssignments | Group-Object -Property RoleGroupingKey)) {
+            $entries = @($roleGroup.Group)
+            if ($entries.Count -eq 0) { continue }
+
+            $sampleEntry = $entries[0]
+            $userEntries = @($entries | Where-Object { $_.PrincipalType -eq "User" })
+            $groupEntries = @($entries | Where-Object { $_.PrincipalType -eq "Group" })
+            $userCount = $userEntries.Count
+            $groupCount = $groupEntries.Count
+
+            $isAllowedGlobalAdminException = $false
+            if ("$($sampleEntry.Role)" -eq "Global Administrator") {
+                if (($userCount -le 2 -and $groupCount -eq 0) -or ($userCount -eq 0 -and $groupCount -eq 1)) {
+                    $isAllowedGlobalAdminException = $true
+                }
+            }
+
+            if ($isAllowedGlobalAdminException) { continue }
+
+            $assignedPrincipals = if ($entries.Count -gt 0) {
+                ($entries | ForEach-Object {
+                    $typedLabel = "$($_.PrincipalDisplayName) ($($_.PrincipalType))"
+                    "<a href=`"$($_.PrincipalLink)`" target=`"_blank`">$typedLabel</a>"
+                } | Sort-Object -Unique) -join "<br>"
+            } else {
+                "-"
+            }
+            $reportRoleFilter = [System.Uri]::EscapeDataString("$($sampleEntry.Role)")
+            $reportScopeFilter = [System.Uri]::EscapeDataString("$($sampleEntry.Scope)")
+            $reportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Role=$reportRoleFilter&Scope=$reportScopeFilter&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
+
+            $pim002Violations.Add([pscustomobject][ordered]@{
+                "DisplayName" = "<a href=`"$reportUrl`" target=`"_blank`">$($sampleEntry.Role)</a>"
+                "Role Tier" = $sampleEntry.RoleTier
+                "Scope" = $sampleEntry.Scope
+                "Assignments" = $entries.Count
+                "Assigned Principals" = $assignedPrincipals
             })
         }
-        Set-FindingOverride -FindingId "PIM-002" -Props @{
-            Status = "Vulnerable"
-            Description = "<p>There are $($pimTier0OnlyPermanentAssignments.Count) Tier-0 roles with only permanent role assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=Tier-0&Eligible=%3D0&Active=%3E0&columns=Role%2CTier%2CEligible%2CActive%2CWarnings"
-            AffectedObjects = $pimTier0PermanentAffected
-        }
-    } else {
-        Write-Log -Level Verbose -Message "[PIM-002] No Tier-0 roles found with only permanent assignments."
-        Set-FindingOverride -FindingId "PIM-002" -Props @{
-            Status = "NotVulnerable"
-            Description = "<p>No tier-0 Entra ID roles identified which have only active role assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=Tier-0&Eligible=%3E0&Active=%3E0&columns=Role%2CTier%2CEligible%2CActive%2CWarnings"
-            AffectedObjects = @()
+
+        if ($pim002Violations.Count -gt 0) {
+            Write-Log -Level Verbose -Message "[PIM-002] Found $($pim002Violations.Count) Tier-0 roles with active user/group assignments that are not activated via PIM."
+            $pim002RoleReportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.DisplayName).html?RoleTier=Tier-0&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
+            Set-FindingOverride -FindingId "PIM-002" -Props @{
+                Status = "Vulnerable"
+                Description = "<p>There are $($pim002Violations.Count) Tier-0 Entra roles with active user or group assignments that are not activated via PIM.</p><p><strong>Allowed exception:</strong> the Global Administrator role may have up to two directly assigned users or one directly assigned group.</p>"
+                RelatedReportUrl = $pim002RoleReportUrl
+                AffectedObjects = $pim002Violations
+            }
+        } else {
+            Write-Log -Level Verbose -Message "[PIM-002] No Tier-0 roles found with disallowed active user/group assignments outside PIM activation."
+            $pim002RoleReportUrl = "Role_Assignments_Entra_$StartTimestamp`_$($CurrentTenant.DisplayName).html?RoleTier=Tier-0&AssignmentType=Active&ActivatedViaPIM=false&PrincipalType=User%7C%7CGroup&columns=Role%2CRoleTier%2CAssignmentType%2CActivatedViaPIM%2CStart%2CExpires%2CPrincipal%2CPrincipalType%2CScope"
+            Set-FindingOverride -FindingId "PIM-002" -Props @{
+                Status = "NotVulnerable"
+                Description = "<p>No Tier-0 Entra roles identified with disallowed active user or group assignments outside PIM activation.</p><p><strong>Allowed exception:</strong> the Global Administrator role may have up to two directly assigned users or one directly assigned group.</p>"
+                RelatedReportUrl = $pim002RoleReportUrl
+                AffectedObjects = @()
+            }
         }
     }
 
@@ -5672,7 +5754,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-004" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0MissingJustificationOrTicketing.Count) Tier-0 roles with eligible assignments that do not require justification or ticketing information on activation.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&Eligible=%3E0&ActivationJustification=%3Dfalse&ActivationTicketing=%3Dfalse&columns=Role%2CTier%2CEligible%2CActive%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&Eligible=%3E0&ActivationJustification=%3Dfalse&ActivationTicketing=%3Dfalse&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
             AffectedObjects = $pimTier0MissingJustificationAffected
         }
     } else {
@@ -5702,14 +5784,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Assignments" = $object.Eligible
-                "Active Assignments" = $object.Active
+                "Direct Assignments" = $object.Direct
                 "Expire Active Assignments" = $object.ActiveExpiration
             })
         }
         Set-FindingOverride -FindingId "PIM-005" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0AllowPermanentActiveAssignments.Count) Tier-0 roles, excluding Global Administrator, that allow permanent active assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&ActiveExpiration=%3Dfalse&Role=%21Global+Administrator&columns=Role%2CTier%2CEligible%2CActive%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&ActiveExpiration=%3Dfalse&Role=%21Global+Administrator&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
             AffectedObjects = $pimTier0PermanentActiveAffected
         }
     } else {
@@ -5739,14 +5821,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Assignments" = $object.Eligible
-                "Active Assignments" = $object.Active
+                "Direct Assignments" = $object.Direct
                 "Justification on Active Assignments" = $object.ActiveAssignJustification
             })
         }
         Set-FindingOverride -FindingId "PIM-006" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0WithoutActiveAssignmentJustification.Count) Tier-0 roles that do not require justification on active assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&ActiveAssignJustification=%3Dfalse&columns=Role%2CTier%2CEligible%2CActive%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CActiveAssignJustification%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&ActiveAssignJustification=%3Dfalse&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CActiveAssignJustification%2CWarnings"
             AffectedObjects = $pimTier0WithoutActiveJustificationAffected
         }
     } else {
@@ -5776,14 +5858,14 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
                 "DisplayName" = "<a href=`"PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html#$($object.Id)`" target=`"_blank`">$($object.Role)</a>"
                 "Role Tier" = $object.Tier
                 "Eligible Assignments" = $object.Eligible
-                "Active Assignments" = $object.Active
+                "Direct Assignments" = $object.Direct
                 "MFA on Active Assignments" = $object.ActiveAssignMFA
             })
         }
         Set-FindingOverride -FindingId "PIM-007" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0WithoutActiveAssignmentMfa.Count) Tier-0 roles that do not require MFA on active assignments.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&ActiveAssignMFA=false&columns=Role%2CTier%2CEligible%2CActive%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&ActiveAssignMFA=false&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CWarnings"
             AffectedObjects = $pimTier0WithoutActiveMfaAffected
         }
     } else {
@@ -5820,7 +5902,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         Set-FindingOverride -FindingId "PIM-008" -Props @{
             Status = "Vulnerable"
             Description = "<p>There are $($pimTier0WithoutAllNotifications.Count) Tier-0 roles that do not have all notifications enabled.</p><p><strong>Important:</strong> This finding requires manual verification. If these events are already monitored by another solution (for example, a SIEM ingesting audit logs), this finding may be considered not applicable.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&or_AlertAssignEligible=false&or_AlertAssignActive=false&or_AlertActivation=false&columns=Role%2CTier%2CEligible%2CActive%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CAlertAssignEligible%2CAlertAssignActive%2CAlertActivation%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?Tier=%3DTier-0&or_AlertAssignEligible=false&or_AlertAssignActive=false&or_AlertActivation=false&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationJustification%2CActivationTicketing%2CActivationDuration%2CActivationApproval%2CEligibleExpiration%2CActiveExpiration%2CActiveAssignMFA%2CAlertAssignEligible%2CAlertAssignActive%2CAlertActivation%2CWarnings"
             AffectedObjects = $pimTier0WithoutNotificationsAffected
         }
     } else {
@@ -5905,7 +5987,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
             Status = "Vulnerable"
             Confidence = $pim009Confidence
             Description = "<p>There are $($pimTier0WithoutApprovalAndStrongReauth.Count) Tier-0 roles with eligible assignments that do not require approval, do not enforce re-authentication with MFA using an Authentication Context, or have issues or gaps in the linked Conditional Access policies.</p><p>Important: The setting <code>On activation, require: Azure MFA</code> does not require the user to provide MFA again if he authenticated with strong credentials or provided multifactor authentication earlier in the session.</p>"
-            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_Warnings=CAP&or_ActivationAuthContext=false&Tier=%3DTier-0&ActivationApproval=%3Dfalse&Eligible=%3E0&columns=Role%2CTier%2CEligible%2CActive%2CActivationAuthContext%2CActivationMFA%2CActivationApproval%2CWarnings"
+            RelatedReportUrl = "PIM_$StartTimestamp`_$($CurrentTenant.DisplayName).html?or_Warnings=CAP&or_ActivationAuthContext=false&Tier=%3DTier-0&ActivationApproval=%3Dfalse&Eligible=%3E0&columns=Role%2CTier%2CEligible%2CDirect%2CActivated%2CActivationAuthContext%2CActivationMFA%2CActivationApproval%2CWarnings"
             AffectedObjects = $pimTier0WeakActivationControlsAffected
         }
     } else {

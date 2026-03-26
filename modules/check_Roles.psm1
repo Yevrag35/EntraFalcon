@@ -26,6 +26,32 @@ function Invoke-CheckRoles {
 
     $ObjectDetailsCache = @{}
 
+    function Format-RoleAssignmentDateTime {
+        param(
+            [Parameter(Mandatory = $false)]
+            $Value
+        )
+
+        if ($null -eq $Value) { return "-" }
+
+        $textValue = [string]$Value
+        if ([string]::IsNullOrWhiteSpace($textValue)) { return "-" }
+        if ($textValue -in @("-", "Permanent")) { return $textValue }
+
+        $parsedDateTime = $null
+        if ($Value -is [datetime]) {
+            $parsedDateTime = $Value
+        } elseif ([datetime]::TryParse($textValue, [ref]$parsedDateTime)) {
+            $null = $parsedDateTime
+        }
+
+        if ($null -ne $parsedDateTime) {
+            return $parsedDateTime.ToString("yyyy-MM-dd HH:mm")
+        }
+
+        return $textValue
+    }
+
     #Function to get details about specific objects
     function Get-ObjectDetails($ObjectID, $type = "unknown") {
         $normalizedType = $type.ToString().ToLowerInvariant()
@@ -328,6 +354,9 @@ function Invoke-CheckRoles {
             "PrincipalType" = $($PrincipalDetails.Type)
             "RoleTier" = $RoleTier
             "AssignmentType" = $($item.AssignmentType)
+            "ActivatedViaPIM" = if ($item.PSObject.Properties.Match('ActivatedViaPIM').Count -gt 0) { $item.ActivatedViaPIM } elseif ($item.PSObject.Properties.Match('Activated').Count -gt 0) { $item.Activated } else { $false }
+            "Start" = Format-RoleAssignmentDateTime -Value $item.StartDateTime
+            "Expires" = Format-RoleAssignmentDateTime -Value $item.EndDateTime
             "DirectoryScopeId" = $($item.DirectoryScopeId)
             "IsPrivileged" = $($item.IsPrivileged)
             "IsBuiltIn" = $($item.IsBuiltIn)
@@ -486,7 +515,7 @@ function Invoke-CheckRoles {
 
     write-host "[*] Writing log files"
 
-    $mainEntraTable = $SortedEntraRoles | select-object -Property Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}},PrincipalType,@{Name = "Scope"; Expression = { $_.ScopeResolvedLink}}
+    $mainEntraTable = $SortedEntraRoles | select-object -Property Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,ActivatedViaPIM,Start,Expires,@{Name = "Principal"; Expression = { $_.PrincipalDisplayNameLink}},PrincipalType,@{Name = "Scope"; Expression = { $_.ScopeResolvedLink}}
     $mainEntraTableJson  = $mainEntraTable | ConvertTo-Json -Depth 5 -Compress
 
     $mainEntraTableHTML = $GLOBALMainTableDetailsHEAD + "`n" + $mainEntraTableJson + "`n" + '</script>'
@@ -533,9 +562,9 @@ $headerHtml = @"
     #Write TXT and CSV files
     $headerTXT | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     $headerTXTEntraRoles | Out-File -Width 512 -FilePath "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
-    $SortedEntraRoles | format-table Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType, PrincipalDisplayName, PrincipalType,ScopeResolved | Out-File -Width 512 "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
+    $SortedEntraRoles | format-table Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType,ScopeResolved | Out-File -Width 512 "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).txt" -Append
     if ($Csv) {
-        $SortedEntraRoles | select-object Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType, PrincipalDisplayName, PrincipalType,ScopeResolved | Export-Csv -Path "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
+        $SortedEntraRoles | select-object Role,RoleTier,IsPrivileged,IsBuiltIn,AssignmentType,ActivatedViaPIM,Start,Expires,PrincipalDisplayName,PrincipalType,ScopeResolved | Export-Csv -Path "$outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName).csv" -NoTypeInformation
     }
     $OutputFormats = if ($Csv) { "CSV,TXT,HTML" } else { "TXT,HTML" }
     write-host "[+] Details of $($SortedEntraRoles.count) Entra ID role assignments stored in output files ($OutputFormats): $outputFolder\$($Title)_Entra_$($StartTimestamp)_$($CurrentTenant.DisplayName)"    

@@ -625,6 +625,16 @@ $global:GLOBALJavaScript_Table = @'
                     }
                 },
                 {
+                    id: "PVRE-002A",
+                    group: "Assignment Type",
+                    description: "Active assignments currently activated through PIM",
+                    label: "Activated via PIM",
+                    filters: {
+                        AssignmentType: "=Active",
+                        ActivatedViaPIM: "=true"
+                    }
+                },
+                {
                     id: "PVRE-003",
                     group: "Scope",
                     description: "Assignments to Tier-0 classified roles",
@@ -745,14 +755,14 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     id: "PVP-004",
                     group: "Tier-0",
-                    description: "Tier-0 roles with active but no eligible assignments",
-                    label: "Tier-0 Roles: Only Active Assignments",
+                    description: "Tier-0 roles with direct but no eligible assignments",
+                    label: "Tier-0 Roles: Only Direct Assignments",
                     filters: {
                         Tier: "Tier-0",
                         Eligible: "=0",
-                        Active: ">0"
+                        Direct: ">0"
                     },
-                    columns: ["Role", "Tier", "Eligible", "Active"]
+                    columns: ["Role", "Tier", "Eligible", "Direct", "Activated"]
                 },
                 {
                     id: "PVP-005",
@@ -780,14 +790,14 @@ $global:GLOBALJavaScript_Table = @'
                 {
                     id: "PVP-007",
                     group: "Tier-0/1",
-                    description: "Tier-0/1 roles with active but no eligible assignments",
-                    label: "Tier-0/1 Roles: Only Active Assignments",
+                    description: "Tier-0/1 roles with direct but no eligible assignments",
+                    label: "Tier-0/1 Roles: Only Direct Assignments",
                     filters: {
                         Tier: "Tier-0 || Tier-1",
                         Eligible: "=0",
-                        Active: ">0"
+                        Direct: ">0"
                     },
-                    columns: ["Role", "Tier", "Eligible", "Active"]
+                    columns: ["Role", "Tier", "Eligible", "Direct", "Activated"]
                 },
                 {
                     id: "PVP-008",
@@ -846,6 +856,9 @@ $global:GLOBALJavaScript_Table = @'
             "ApiDeleg": "Unique consented delegated API permissions",
             "PIM": "Onboarded to PIM for Groups",
             "Protected": "Not role assignable, not synced from on-prem, not in a restricted Administrative Unit.\nTherefore: cannot be modified by low-tier admin",
+            "Eligible": "Number of eligible role assignments",
+            "Direct": "Number of directly assigned active role assignments that are not activated via PIM",
+            "Activated": "Number of currently active role assignments activated via PIM",
             "AssignmentType": "Activated eligible assignments also appear as active",
             "Conditions": "Has additional conditions"
         };
@@ -2022,7 +2035,7 @@ $global:GLOBALJavaScript_Table = @'
 
             const isDark = document.body.classList.contains("dark-mode");
 
-            const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged', 'SAML', 'Agent']);
+            const redIfTrueHeaders = new Set(['Foreign', 'Inactive', 'PIM', 'Dynamic', 'SecurityEnabled', 'OnPrem', 'Conditions', 'IsBuiltIn', 'IsPrivileged', 'SAML', 'Agent', 'ActivatedViaPIM']);
             const redIfFalseHeaders = new Set(['AppLock', 'MfaCap', 'Protected', 'Enabled', 'RoleAssignable', 'ActivationMFA', 'ActivationAuthContext', 'ActivationApproval', 'ActiveAssignMFA', 'EligibleExpiration', 'ActiveExpiration', 'ActivationJustification', 'ActivationTicketing', 'ActiveAssignJustification', 'AlertAssignEligible', 'AlertAssignActive', 'AlertActivation']);
             const redIfContent = new Set(['all', 'alltrusted', 'report-only', 'disabled', 'public', 'guest', 'customrole', 'active', 'tier-0', 'tier-1', 'tier-2']);
             const redIfContentHeaders = new Set(['IncUsers', 'IncResources', 'IncNw', 'ExcNw', 'IncPlatforms', 'State', 'Visibility', 'UserType', 'RoleType', 'AssignmentType', 'EntraMaxTier', 'AzureMaxTier', 'PerUserMfa']);
@@ -5226,6 +5239,7 @@ function Get-EntraPIMRoleAssignments {
         $TenantPIMRoleAssignments += [PSCustomObject]@{
             PrincipalId     = $_.PrincipalId
             AssignmentType  = "Eligible"
+            ActivatedViaPIM = $false
             DirectoryScopeId = $_.DirectoryScopeId
             RoleDefinitionId  = $_.RoleDefinition.Id
             DisplayName      = $_.RoleDefinition.DisplayName
@@ -5233,8 +5247,10 @@ function Get-EntraPIMRoleAssignments {
             RoleTier         = $RoleTier
             IsEnabled        = $_.RoleDefinition.IsEnabled
             IsBuiltIn        = $_.RoleDefinition.IsBuiltIn
-            StartTime        = $_.ScheduleInfo.StartDateTime
-            ExpiryDate       = if ($_.ScheduleInfo.Expiration.EndDateTime) {$_.ScheduleInfo.Expiration.EndDateTime} else {"noExpiration"}
+            StartDateTime    = $_.ScheduleInfo.StartDateTime
+            EndDateTime      = if ($_.ScheduleInfo.Expiration.EndDateTime) {$_.ScheduleInfo.Expiration.EndDateTime} else {"Permanent"}
+            RoleAssignmentScheduleId = $null
+            RoleAssignmentOriginId = $null
             ScopeResolved    = ($ScopeResolved | select-object DisplayName,Type)
         }
 
@@ -5258,10 +5274,69 @@ function Get-EntraRoleAssignments {
 
     # Create a array to store the role assignments
     $TenantRoleAssignments = @()
+    $ActiveScheduleAssignmentsByOriginId = @{}
+    $ActiveScheduleAssignmentsByKey = @{}
+
+    if ($GLOBALGraphExtendedChecks -and $GLOBALPIMsGraphAccessToken) {
+        if (-not (Invoke-CheckTokenExpiration $GLOBALPIMsGraphAccessToken)) { Invoke-MsGraphRefreshPIM | Out-Null }
+
+        try {
+            $ScheduleQueryParameters = @{
+                '$select' = "principalId,directoryScopeId,roleDefinitionId,startDateTime,endDateTime,assignmentType,roleAssignmentOriginId,roleAssignmentScheduleId"
+            }
+            $AssignmentScheduleInstances = @(Send-GraphRequest -AccessToken $GLOBALPIMsGraphAccessToken.access_token -Method GET -Uri "/roleManagement/directory/roleAssignmentScheduleInstances" -QueryParameters $ScheduleQueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name) -ErrorAction Stop)
+
+            foreach ($instance in $AssignmentScheduleInstances) {
+                if ([string]$instance.assignmentType -notin @("Activated", "Assigned")) { continue }
+
+                $scopeId = if ([string]::IsNullOrWhiteSpace([string]$instance.directoryScopeId)) { "/" } else { [string]$instance.directoryScopeId }
+                $lookupKey = "$($instance.principalId)|$($instance.roleDefinitionId)|$scopeId"
+                $scheduleEntry = [PSCustomObject]@{
+                    StartDateTime            = $instance.startDateTime
+                    EndDateTime              = $instance.endDateTime
+                    ScheduleAssignmentType   = [string]$instance.assignmentType
+                    RoleAssignmentScheduleId = $instance.roleAssignmentScheduleId
+                    RoleAssignmentOriginId   = $instance.roleAssignmentOriginId
+                }
+
+                if (
+                    -not $ActiveScheduleAssignmentsByKey.ContainsKey($lookupKey) -or
+                    (
+                        $null -ne $instance.endDateTime -and
+                        (
+                            $null -eq $ActiveScheduleAssignmentsByKey[$lookupKey].EndDateTime -or
+                            [datetime]$instance.endDateTime -gt [datetime]$ActiveScheduleAssignmentsByKey[$lookupKey].EndDateTime
+                        )
+                    )
+                ) {
+                    $ActiveScheduleAssignmentsByKey[$lookupKey] = $scheduleEntry
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace([string]$instance.roleAssignmentOriginId)) {
+                    if (
+                        -not $ActiveScheduleAssignmentsByOriginId.ContainsKey($instance.roleAssignmentOriginId) -or
+                        (
+                            $null -ne $instance.endDateTime -and
+                            (
+                                $null -eq $ActiveScheduleAssignmentsByOriginId[$instance.roleAssignmentOriginId].EndDateTime -or
+                                [datetime]$instance.endDateTime -gt [datetime]$ActiveScheduleAssignmentsByOriginId[$instance.roleAssignmentOriginId].EndDateTime
+                            )
+                        )
+                    ) {
+                        $ActiveScheduleAssignmentsByOriginId[$instance.roleAssignmentOriginId] = $scheduleEntry
+                    }
+                }
+            }
+
+            Write-Log -Level Debug -Message "Got $($ActiveScheduleAssignmentsByKey.Count) active Entra role assignment schedule instances"
+        } catch {
+            Write-Log -Level Debug -Message "Unable to enrich Entra role assignments with PIM activation data: $($_.Exception.Message)"
+        }
+    }
 
     # Get all roleassignments
     $QueryParameters = @{
-        '$select' = "PrincipalId,DirectoryScopeId,RoleDefinitionId"
+        '$select' = "Id,PrincipalId,DirectoryScopeId,RoleDefinitionId"
         '$expand' = "RoleDefinition"
     }
     $TenantRoleAssignmentsRaw = Send-GraphRequest -AccessToken $GLOBALMsGraphAccessToken.access_token -Method GET -Uri "/roleManagement/directory/roleAssignments" -QueryParameters $QueryParameters -BetaAPI -UserAgent $($GlobalAuditSummary.UserAgent.Name)
@@ -5291,10 +5366,38 @@ function Get-EntraRoleAssignments {
             $RoleTier = "?"
         }
 
+        $scopeId = if ([string]::IsNullOrWhiteSpace([string]$role.DirectoryScopeId)) { "/" } else { [string]$role.DirectoryScopeId }
+        $lookupKey = "$($role.PrincipalId)|$($role.RoleDefinition.Id)|$scopeId"
+        $ActiveScheduleAssignment = $null
+        $IsActivated = $false
+        $StartDateTime = "-"
+        $EndDateTime = "Permanent"
+        $RoleAssignmentScheduleId = $null
+        $RoleAssignmentOriginId = $null
+
+        if (-not [string]::IsNullOrWhiteSpace([string]$role.Id) -and $ActiveScheduleAssignmentsByOriginId.ContainsKey($role.Id)) {
+            $ActiveScheduleAssignment = $ActiveScheduleAssignmentsByOriginId[$role.Id]
+        } elseif ($ActiveScheduleAssignmentsByKey.ContainsKey($lookupKey)) {
+            $ActiveScheduleAssignment = $ActiveScheduleAssignmentsByKey[$lookupKey]
+        }
+
+        if ($null -ne $ActiveScheduleAssignment) {
+            $IsActivated = $ActiveScheduleAssignment.ScheduleAssignmentType -eq "Activated"
+            if ($null -ne $ActiveScheduleAssignment.StartDateTime) {
+                $StartDateTime = $ActiveScheduleAssignment.StartDateTime
+            }
+            if ($null -ne $ActiveScheduleAssignment.EndDateTime) {
+                $EndDateTime = $ActiveScheduleAssignment.EndDateTime
+            }
+            $RoleAssignmentScheduleId = $ActiveScheduleAssignment.RoleAssignmentScheduleId
+            $RoleAssignmentOriginId = $ActiveScheduleAssignment.RoleAssignmentOriginId
+        }
+
         # Add the role assignment to the array
         $TenantRoleAssignments += [PSCustomObject]@{
             PrincipalId      = $role.PrincipalId
             AssignmentType   = "Active"
+            ActivatedViaPIM  = $IsActivated
             DirectoryScopeId  = $role.DirectoryScopeId
             RoleDefinitionId = $role.RoleDefinition.Id
             DisplayName      = $role.RoleDefinition.DisplayName
@@ -5302,6 +5405,10 @@ function Get-EntraRoleAssignments {
             RoleTier         = $RoleTier
             IsEnabled        = $role.RoleDefinition.IsEnabled
             IsBuiltIn        = $role.RoleDefinition.IsBuiltIn
+            StartDateTime    = $StartDateTime
+            EndDateTime      = $EndDateTime
+            RoleAssignmentScheduleId = $RoleAssignmentScheduleId
+            RoleAssignmentOriginId = $RoleAssignmentOriginId
             ScopeResolved    = ($ScopeResolved | select-object DisplayName,Type)
         }
     }
