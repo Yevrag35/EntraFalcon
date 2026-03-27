@@ -45,3 +45,13 @@ Please keep changes compatible with Windows PowerShell 5.1.
 The project should remain self-contained. Do not introduce external dependencies. This also includes externally loaded resources such as JavaScript files, stylesheets, or similar assets.
 
 Please also consider performance impacts. EntraFalcon may be used in very large tenants, for example with 200,000 objects, so changes should avoid unnecessary overhead, repeated lookups, or patterns that scale poorly.
+
+## Forked Repositories
+
+Do not make changes in the forked repositories that are used by this project. If changes are required there, they should be proposed and maintained in the corresponding upstream or dedicated repository instead.
+
+This applies in particular to:
+- `EntraTokenAid`
+- `GraphRequest`
+- `Send-ApiRequest`
+- `GraphBatchRequest`
