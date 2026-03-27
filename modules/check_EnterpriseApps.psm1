@@ -1131,7 +1131,6 @@ function Invoke-CheckEnterpriseApps {
             ''
         }
 
-        # if 
         if ($AppsignInData.lastSignInDays) {
             $LastSignInDays = $AppsignInData.lastSignInDays
         } else {

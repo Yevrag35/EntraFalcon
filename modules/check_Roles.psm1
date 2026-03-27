@@ -38,14 +38,16 @@ function Invoke-CheckRoles {
         if ([string]::IsNullOrWhiteSpace($textValue)) { return "-" }
         if ($textValue -in @("-", "Permanent")) { return $textValue }
 
-        $parsedDateTime = $null
+        [datetime]$parsedDateTime = [datetime]::MinValue
+        $hasParsedDateTime = $false
         if ($Value -is [datetime]) {
             $parsedDateTime = $Value
-        } elseif ([datetime]::TryParse($textValue, [ref]$parsedDateTime)) {
-            $null = $parsedDateTime
+            $hasParsedDateTime = $true
+        } else {
+            $hasParsedDateTime = [datetime]::TryParse($textValue, [ref]$parsedDateTime)
         }
 
-        if ($null -ne $parsedDateTime) {
+        if ($hasParsedDateTime) {
             return $parsedDateTime.ToString("yyyy-MM-dd HH:mm")
         }
 
