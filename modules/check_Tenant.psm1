@@ -1771,7 +1771,7 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
     $CAP005VariantProps = @{
         Default = @{
             Threat = "<p>Modern phishing attacks can bypass traditional MFA methods, reducing their effectiveness against advanced threats. As a result, even accounts protected by MFA may remain vulnerable, especially privileged accounts.</p><p>If compromised, these accounts could be abused by attackers to gain broad access to cloud resources, escalate privileges, or move laterally across the environment unless additional protections are in place.</p>"
-            Remediation = '<p>At least sensitive and highly privileged accounts should be protected with phishing-resistant MFA.</p><p>To enforce this, a Conditional Access policy should be implemented that targets all critical accounts and requires an authentication strength configured for phishing-resistant methods.</p><p>Reference:<br>https://learn.microsoft.com/en-us/entra/fundamentals/configure-security#privileged-users-sign-in-with-phishing-resistant-methods<br>https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-admin-phish-resistant-mfa</p>'
+            Remediation = '<p>At least sensitive and highly privileged accounts should be protected with phishing-resistant MFA.</p><p>To enforce this, a Conditional Access policy should be implemented that targets all critical accounts and requires an authentication strength configured for phishing-resistant methods.</p><p>Reference:</p><ul><li><a href="https://learn.microsoft.com/en-us/entra/fundamentals/configure-security#privileged-users-sign-in-with-phishing-resistant-methods" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/fundamentals/configure-security#privileged-users-sign-in-with-phishing-resistant-methods</a></li><li><a href="https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-admin-phish-resistant-mfa" target="_blank" rel="noopener noreferrer">https://learn.microsoft.com/en-us/entra/identity/conditional-access/policy-admin-phish-resistant-mfa</a></li></ul>'
         }
         Vulnerable = @{ Status = "Vulnerable" }
         Secure = @{
@@ -8955,7 +8955,13 @@ Update-MgPolicyAuthorizationPolicy -AllowedToUseSspr:$false</code></pre><p>Refer
         }
 
         function downloadBlob(filename, content, type) {
-            var blob = new Blob([content], { type: type });
+            var payload = content;
+            var mimeType = type || "application/octet-stream";
+            if (mimeType.toLowerCase() === "text/csv") {
+                payload = "\uFEFF" + String(content == null ? "" : content);
+                mimeType += ";charset=utf-8";
+            }
+            var blob = new Blob([payload], { type: mimeType });
             var url = URL.createObjectURL(blob);
             var a = document.createElement("a");
             a.href = url;
